@@ -1,8 +1,10 @@
-from langchain_community.llms import Tongyi
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import OpenAI
 
-llm = Tongyi()
+llm = OpenAI(
+    model='deepseek-chat',
+    base_url='https://api.deepseek.com'
+)
 
 # 定义 ChatPromptTemplate
 template = ChatPromptTemplate.from_messages([
@@ -13,7 +15,7 @@ template = ChatPromptTemplate.from_messages([
 ])
 
 # 创建链式调用
-chain = template | llm | StrOutputParser
+chain = template | llm
 
 # 格式化输入
 input_data = {"name": "Bob", "user_input": "给我讲一个埃及法老的笑话"}
