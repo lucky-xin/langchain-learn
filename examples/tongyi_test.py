@@ -36,19 +36,20 @@ if __name__ == '__main__':
         ("human", "Hello, how are you doing?"),
         ("ai", "I'm doing well, thanks!"),
         # 历史消息占位符
-        MessagesPlaceholder(variable_name="history"),
+        # MessagesPlaceholder(variable_name="history"),
         ("human", "{user_input}"),
     ])
     session_id = str(uuid.uuid4())
     # 创建链式调用
-    chain = template | llm | StrOutputParser
-    table_name = "chat_history"
-    chat_history = create_chat_history(table_name)
+    chain = template | llm
+
     # 格式化输入
     input_data = {"name": "Bob", "user_input": "给我讲一个埃及法老的笑话"}
 
-    chat_history.add_messages(template.messages)
 
     # 调用链并获取结果
     result = chain.invoke(input_data)
     print(result)
+    table_name = "chat_history"
+    chat_history = create_chat_history(table_name)
+    chat_history.add_messages(template.messages)
