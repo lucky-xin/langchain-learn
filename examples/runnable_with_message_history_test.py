@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langchain_community.llms import Tongyi
+from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -56,8 +57,8 @@ if __name__ == '__main__':
 
     chain_with_history = RunnableWithMessageHistory(
         chain,
-        ChatHistoryStore(),
-        # lambda conversation_id, user_id: InMemoryChatMessageHistory(),
+        # ChatHistoryStore(),
+        lambda conversation_id, user_id: InMemoryChatMessageHistory(),
         input_messages_key='question',
         history_messages_key='history',
         history_factory_config=[
