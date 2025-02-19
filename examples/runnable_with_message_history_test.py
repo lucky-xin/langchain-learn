@@ -57,6 +57,7 @@ if __name__ == '__main__':
     chain_with_history = RunnableWithMessageHistory(
         chain,
         ChatHistoryStore(),
+        # lambda conversation_id, user_id: InMemoryChatMessageHistory(),
         input_messages_key='question',
         history_messages_key='history',
         history_factory_config=[
