@@ -1,3 +1,4 @@
+import base64
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -17,9 +18,14 @@ def get_current_timestamp() -> int:
     current_time = datetime.now(timezone)
     return int(current_time.timestamp())
 
+
 if __name__ == '__main__':
     llm = Tongyi()
     additionals = {"timestamp": "{timestamp}", "user_id": "{user_id}"}
+    fp = "image.jpg"
+    # 读取图片并转换为base64编码
+    with open(fp, "rb") as image_file:
+        img_b64 = base64.b64encode(image_file.read()).decode('utf-8')
     # 定义 ChatPromptTemplate
     template = ChatPromptTemplate.from_messages([
         SystemMessage(
@@ -27,7 +33,10 @@ if __name__ == '__main__':
             additional_kwargs=additionals
         ),
         HumanMessage(
-            content="Hello, how are you doing?",
+            content=[
+                {"type": "text", "text": "用中文描述这张图片的天气"},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{img_b64}"}}
+            ],
             additional_kwargs=additionals
         ),
         AIMessage(
@@ -78,7 +87,13 @@ if __name__ == '__main__':
         "timestamp": get_current_timestamp(),
         "user_id": user_id
     }
-    config = {'configurable': {'conversation_id': session_id, 'user_id': user_id}}
+    config = {
+        'configurable': {
+            'conversation_id': session_id,
+            'user_id': user_id,
+            "timestamp": get_current_timestamp(),
+        }
+    }
     # 调用链并获取结果
     res = chain_with_history.invoke(
         input=input_data,

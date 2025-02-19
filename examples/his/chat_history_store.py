@@ -35,12 +35,12 @@ class PgSQLChatMessageHistory(PostgresChatMessageHistory):
         )
 
     def add_message(self, message: BaseMessage) -> None:
-        message.additional_kwargs["timestamp"] = get_current_timestamp()
+        # message.additional_kwargs["timestamp"] = get_current_timestamp()
         super().add_message(message)
 
     def add_messages(self, messages: Sequence[BaseMessage]) -> None:
-        for message in messages:
-            message.additional_kwargs["timestamp"] = get_current_timestamp()
+        # for message in messages:
+        #     message.additional_kwargs["timestamp"] = get_current_timestamp()
         super().add_messages(messages)
 
 
