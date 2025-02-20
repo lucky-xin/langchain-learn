@@ -58,21 +58,13 @@ if __name__ == '__main__':
     chain_with_history = RunnableWithMessageHistory(
         chain,
         # ChatHistoryStore(),
-        lambda conversation_id, user_id: InMemoryChatMessageHistory(),
+        lambda session_id: InMemoryChatMessageHistory(),
         input_messages_key='question',
         history_messages_key='history',
         history_factory_config=[
             ConfigurableFieldSpec(
-                id='user_id',
-                name="User ID",
-                annotation=str,
-                description='用户的唯一标识符',
-                default="none",
-                is_shared=True,
-            ),
-            ConfigurableFieldSpec(
-                id='conversation_id',
-                name="Conversation ID",
+                id='session_id',
+                name="Session ID",
                 annotation=str,
                 description='对话的唯一标识符',
                 default="none",
@@ -82,17 +74,14 @@ if __name__ == '__main__':
     )
 
     session_id = str(uuid.uuid4())
-    user_id = str(uuid.uuid4())
     input_data = {
         "name": "Bob",
         "question": "给我讲一个埃及法老的笑话",
-        "timestamp": get_current_timestamp(),
-        "user_id": user_id
+        "timestamp": get_current_timestamp()
     }
     config = {
         'configurable': {
-            'conversation_id': session_id,
-            'user_id': user_id,
+            'session_id': session_id,
             "timestamp": get_current_timestamp(),
         }
     }

@@ -35,7 +35,7 @@ def configure_retriever(files):
 
     return vector_db.as_retriever()
 
-
+st.title("文档问答")
 st.set_page_config(
     page_title="文档问答",
     page_icon="🤖",
@@ -47,7 +47,7 @@ st.set_page_config(
         'About': "# This is a header. This is an *extremely* cool app!"
     }
 )
-st.title("文档问答")
+
 
 upload_files = st.sidebar.file_uploader("上传文件", type=["pdf", "docx", "md", "txt"], accept_multiple_files=True)
 
