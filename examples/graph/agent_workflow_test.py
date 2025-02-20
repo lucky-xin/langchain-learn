@@ -112,7 +112,6 @@ async def main():
         }
 
     async def replan_step(state: PlanExecute):
-        print(state)
         output = await replanner.ainvoke(state)
 
         if "action" in output and isinstance(output.action, Response):
