@@ -10,6 +10,7 @@ class Joke(BaseModel):
 
 
 if __name__ == '__main__':
+
     jq = "告诉我一个笑话"
     parser = JsonOutputParser(pydantic_object=Joke)
     prompt = PromptTemplate(
