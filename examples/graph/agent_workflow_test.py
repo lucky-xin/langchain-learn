@@ -1,15 +1,18 @@
 import asyncio
 import operator
+import os
 from typing import Annotated, List, Tuple, TypedDict, Union
 
 from langchain import hub
-from langchain_community.chat_models import ChatTongyi
-from langchain_community.tools import TavilySearchResults
+from langchain_community.tools import DuckDuckGoSearchResults, TavilySearchResults
+from langchain_community.tools.wikidata.tool import WikidataQueryRun
+from langchain_community.utilities.wikidata import WikidataAPIWrapper
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 
 class PlanExecute(TypedDict):
@@ -38,30 +41,36 @@ class Action(BaseModel):
     )
 
 
-tools = [TavilySearchResults(max_results=1)]
+tools = [
+    TavilySearchResults(),
+    DuckDuckGoSearchResults(),
+    WikidataQueryRun(api_wrapper=WikidataAPIWrapper())
+]
 
 prompt = hub.pull("wfh/react-agent-executor")
 prompt.pretty_print()
 
-llm = ChatTongyi(max_retries=5)
 
-agent_executor = create_react_agent(llm, tools, messages_modifier=prompt)
+def create_chat_ai():
+    return ChatOpenAI(
+        api_key=os.getenv("DASHSCOPE_API_KEY"),
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model="qwen-turbo-latest",
+    )
 
 planner_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
             """
-            对于给定的目标，提出一个简单的逐步计划。这个计划应该包含独立的任务，如果正确执行将得出正确的答案。
-            不要添加任何多余的步骤。最后一步的结果应该是最终答案。
-            确保每一步都有所有必要的信息 -不要跳过步骤。
+            对于给定的目标，提出一个简单的逐步计划。这个计划应该包含独立的任务，如果正确执行将得出正确的答案。不要添加任何多余的步骤。最后一步的结果应该是最终答案。 确保每一步都有所有必要的信息。请以JSON格式输出。不要跳过步骤。-
             """
         ),
         ("placeholder", "{messages}"),
     ]
 )
 
-planner_llm = ChatTongyi(max_retries=5).with_structured_output(Plan)
+planner_llm = create_chat_ai().with_structured_output(schema=Plan, method="function_calling")
 
 planner = planner_prompt | planner_llm
 
@@ -88,9 +97,16 @@ replanner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-replanner_llm = ChatTongyi(max_retries=5).with_structured_output(Action)
+replanner_llm = create_chat_ai().with_structured_output(schema=Action, method="function_calling")
 
 replanner = replanner_prompt | replanner_llm
+
+agent_executor = create_react_agent(
+    create_chat_ai(),
+    tools,
+    messages_modifier=prompt,
+    # response_format={"type": "json_object"}
+)
 
 
 async def main():
@@ -113,8 +129,9 @@ async def main():
 
     async def replan_step(state: PlanExecute):
         output = await replanner.ainvoke(state)
-
-        if "action" in output and isinstance(output.action, Response):
+        if not output:
+            return {"plan": state["plan"][-1]}
+        if isinstance(output.action, Response):
             return {"response": output.action.response}
         return {"plan": output.action.steps}
 
@@ -142,7 +159,7 @@ async def main():
         f.write(graph_png)
 
     config = {"recursion_limit": 50}
-    inputs = {"input": "2024年巴黎奥运会100米自由泳决赛冠军的家乡是哪里?请用中文答"}
+    inputs = {"input": "2024年奥运会100米自由泳决赛冠军是谁？他的家乡是哪里？请用中文答"}
 
     async for event in app.astream(inputs, config=config):
         for k, v in event.items():
