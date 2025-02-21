@@ -42,8 +42,8 @@ class Action(BaseModel):
 
 
 tools = [
-    TavilySearchResults(),
     DuckDuckGoSearchResults(),
+    TavilySearchResults(),
     WikidataQueryRun(api_wrapper=WikidataAPIWrapper())
 ]
 
