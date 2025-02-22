@@ -9,10 +9,17 @@ from langchain.chains.retrieval import create_retrieval_chain
 from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_core.documents import Document
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import BasePromptTemplate
 from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
+from pydantic import BaseModel, Field
 
 from examples.factory.ai_factory import create_ai
+
+
+class ChatResp(BaseModel):
+    answer: str = Field(description="回答")
+    context: List[str] = Field(description="上下文")
 
 
 def create_vector_store() -> VectorStore:
@@ -81,8 +88,9 @@ def add_documents(store: VectorStore, docs: List[Document]):
 
 # clear the chat history from streamlit session state
 def clear_history():
-    if 'history' in st.session_state:
-        del st.session_state['history']
+    pass
+    # if 'history' in st.session_state:
+    # del st.session_state['history']
 
 
 # calculate embedding cost using tiktoken
@@ -107,9 +115,7 @@ if __name__ == "__main__":
     create_tmp_dir(parent_path)
 
     # st.image('img.png')
-    # st.subheader('LLM Question-Answering Application  ')
-    st.set_page_config(page_title="Local AI Chat Powered by DashScope", page_icon="🤖", layout="wide")
-    st.title("📄文档对话")
+    st.subheader('Qwen🤖')
     st.session_state.vs = create_vector_store()
 
     with st.sidebar:
@@ -141,24 +147,27 @@ if __name__ == "__main__":
                 tokens, embedding_cost = calculate_embedding_cost(chunk_docs)
                 st.write(f'Embedding cost: ${embedding_cost:.4f}')
                 st.success('File uploaded, chunked and embedded successfully.')
-    q = st.text_input("提问", placeholder="请问我任何关于文章的问题", disabled=not uploaded_file)
-    rag_chain = create_retrieval_chain(st.session_state.vs.as_retriever(), combine_docs_chain)
-    if q:
-        similar_doc = st.session_state.vs.similarity_search(q, k=1)
-        if similar_doc:
-            st.write("相关上下文：")
-            st.write(similar_doc)
-        response = rag_chain.invoke({"input": q})
-        answer = response["answer"]
-        st.text_area("AI回答", value=f"{answer}")
-        st.divider()
 
-        # if there's no chat history in the session state, create it
-        if 'history' not in st.session_state:
-            st.session_state.history = ''
-        # the current question and answer
-        value = f'Q: {q} \nA: {answer}'
-        st.session_state.history = f'{value} \n {"-" * 100} \n {st.session_state.history}'
-        h = st.session_state.history
-        # text area widget for the chat history
-        st.text_area(label='Chat History', value=h, key='history', height=400)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"])
+        st.markdown(msg["content"])
+    parser = JsonOutputParser(pydantic_object=ChatResp)
+    rag_chain = create_retrieval_chain(st.session_state.vs.as_retriever(), combine_docs_chain)
+    q = st.chat_input(placeholder="请问我任何关于文章的问题", disabled=not uploaded_file)
+    if q:
+        st.chat_message("user").markdown(q)
+        st.session_state.messages.append({"role": "user", "content": q})
+        output_placeholder = st.empty()
+        collected_messages = ""
+        with st.chat_message("assistant"):
+            # st_callback = StreamlitCallbackHandler(st.container())
+            # stream = rag_chain.stream({"input": q}, config={"callbacks": [st_callback]})
+            # st.write(stream)
+            stream = rag_chain.stream({"input": q})
+            for chunk in stream:
+                if "answer" in chunk:
+                    collected_messages += chunk.get("answer")
+                    output_placeholder.text(collected_messages)
+            st.session_state.messages.append({"role": "assistant", "content": collected_messages})
