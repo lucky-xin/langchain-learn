@@ -3,14 +3,13 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from langchain_community.llms import Tongyi
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFieldSpec
 
-from examples.his.chat_history_store import ChatHistoryStore
+from examples.factory.ai_factory import create_ai
 
 
 def get_current_timestamp() -> int:
@@ -21,7 +20,7 @@ def get_current_timestamp() -> int:
 
 
 if __name__ == '__main__':
-    llm = Tongyi()
+    llm = create_ai()
     additionals = {"timestamp": "{timestamp}", "user_id": "{user_id}"}
     fp = "image.jpg"
     # 读取图片并转换为base64编码

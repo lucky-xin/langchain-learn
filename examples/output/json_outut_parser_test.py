@@ -1,7 +1,8 @@
-from langchain_community.llms import Tongyi
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
+
+from examples.factory.ai_factory import create_ai
 
 
 class Joke(BaseModel):
@@ -19,7 +20,7 @@ if __name__ == '__main__':
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
 
-    llm = Tongyi()
+    llm = create_ai()
     chain = prompt | llm | parser
     for s in chain.stream({"query": jq}):
         print(s)

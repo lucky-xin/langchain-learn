@@ -4,7 +4,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from openai import OpenAI
 
 client = OpenAI(
-    api_key="sk-91502b8e4e3f457a93e905e606efb772",
     base_url='https://api.deepseek.com'
 )
 

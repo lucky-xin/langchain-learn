@@ -2,8 +2,6 @@ import os.path
 import tempfile
 
 import streamlit as st
-import uvicorn
-from fastapi import FastAPI
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain.tools.retriever import create_retriever_tool
@@ -13,9 +11,9 @@ from langchain_community.document_loaders import TextLoader
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langserve import add_routes
+
+from examples.factory.ai_factory import create_ai
 
 
 @st.cache_resource(ttl="1h")
@@ -123,17 +121,10 @@ New input: {input}
 """
 
 
-def create_chat_ai():
-    return ChatOpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY"),
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model="qwen-turbo-latest",
-    )
-
 base_prompt = PromptTemplate.from_template(base_prompt_template)
 
 prompt = base_prompt.partial(instructions=instructions)
-llm = create_chat_ai()
+llm = create_ai()
 
 agent = create_react_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
@@ -157,13 +148,13 @@ if user_query:
         st.session_state.messages.append({"role": "assistant", "content": response["output"]})
         st.write(response["output"])
 
-app = FastAPI(title="我的LangChain服务", version="1.0.0", description="LangChain服务")
-
-# add_routes(
-#     app,
-#     chain,
-#     path="/chain"
-# )
-
-if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# app = FastAPI(title="我的LangChain服务", version="1.0.0", description="LangChain服务")
+#
+# # add_routes(
+# #     app,
+# #     chain,
+# #     path="/chain"
+# # )
+#
+# if __name__ == '__main__':
+#     uvicorn.run(app, host="0.0.0.0", port=8000)

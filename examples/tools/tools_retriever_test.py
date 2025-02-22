@@ -2,7 +2,6 @@ import uuid
 
 from langchain import hub
 from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_community.chat_models import ChatTongyi
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_community.tools import TavilySearchResults
@@ -11,6 +10,7 @@ from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFie
 from langchain_core.tools import create_retriever_tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from examples.factory.ai_factory import create_ai
 from examples.his.chat_history_store import ChatHistoryStore
 
 loader = WebBaseLoader("https://zh.wikipedia.org/wiki/%E7%8C%AB")
@@ -33,7 +33,7 @@ retriever_tool = create_retriever_tool(
     """,
 )
 
-llm = ChatTongyi(max_retries=5)
+llm = create_ai()
 search = TavilySearchResults()
 tools = [retriever_tool, search]
 

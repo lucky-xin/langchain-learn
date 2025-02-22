@@ -1,6 +1,7 @@
-from langchain_community.llms import Tongyi
 from langchain_core.output_parsers import XMLOutputParser
 from langchain_core.prompts import PromptTemplate
+
+from examples.factory.ai_factory import create_ai
 
 if __name__ == '__main__':
     jq = "生成周星驰的简化电影作品列表，按照最新的时间降序"
@@ -11,7 +12,7 @@ if __name__ == '__main__':
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
     print(parser.get_format_instructions())
-    llm = Tongyi()
+    llm = create_ai()
     chain = prompt | llm
     resp = chain.invoke({"query": jq})
     xml_output = parser.parse(resp)

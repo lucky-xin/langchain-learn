@@ -1,18 +1,22 @@
 import asyncio
 import operator
-import os
 from typing import Annotated, List, Tuple, TypedDict, Union
 
 from langchain import hub
-from langchain_community.tools import DuckDuckGoSearchResults, TavilySearchResults
-from langchain_community.tools.wikidata.tool import WikidataQueryRun
-from langchain_community.utilities.wikidata import WikidataAPIWrapper
+from langchain_community.tools import DuckDuckGoSearchResults, TavilySearchResults, WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
-from pydantic.v1 import BaseModel, Field
+from pydantic import BaseModel, Field
+
+from examples.factory.ai_factory import create_ai
+
+
+class WikiInputs(BaseModel):
+    """Inputs to the wikipedia tool."""
+    query: str = Field(description="query to look up in Wikipedia, should be 3 or less words")
 
 
 class PlanExecute(TypedDict):
@@ -42,21 +46,15 @@ class Action(BaseModel):
 
 
 tools = [
+    WikipediaQueryRun(
+        name="wiki-tool",
+        description="look up things in wikipedia",
+        args_schema=WikiInputs,
+        api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100),
+    ),
     DuckDuckGoSearchResults(),
     TavilySearchResults(),
-    WikidataQueryRun(api_wrapper=WikidataAPIWrapper())
 ]
-
-prompt = hub.pull("wfh/react-agent-executor")
-prompt.pretty_print()
-
-
-def create_chat_ai():
-    return ChatOpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY"),
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model="qwen-turbo-latest",
-    )
 
 planner_prompt = ChatPromptTemplate.from_messages(
     [
@@ -70,7 +68,7 @@ planner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-planner_llm = create_chat_ai().with_structured_output(schema=Plan, method="function_calling")
+planner_llm = create_ai().with_structured_output(schema=Plan, method="function_calling")
 
 planner = planner_prompt | planner_llm
 
@@ -97,17 +95,17 @@ replanner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-replanner_llm = create_chat_ai().with_structured_output(schema=Action, method="function_calling")
+replanner_llm = create_ai().with_structured_output(schema=Action, method="function_calling")
 
 replanner = replanner_prompt | replanner_llm
 
+prompt = hub.pull("wfh/react-agent-executor")
+prompt.pretty_print()
 agent_executor = create_react_agent(
-    create_chat_ai(),
+    create_ai(),
     tools,
-    messages_modifier=prompt,
-    # response_format={"type": "json_object"}
+    messages_modifier=prompt
 )
-
 
 async def main():
     async def plan_step(state: PlanExecute):
@@ -124,7 +122,7 @@ async def main():
 """
         agent_response = await agent_executor.ainvoke({"messages": [("user", task_formatted)]})
         return {
-            "past_steps": state["past_steps"] + [(task, agent_response["messages"][-1].content)],
+            "past_steps": state["past_steps"] + [(task, agent_response["messages"][-1].title)],
         }
 
     async def replan_step(state: PlanExecute):

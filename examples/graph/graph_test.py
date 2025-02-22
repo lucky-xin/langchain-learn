@@ -1,10 +1,10 @@
-from jinja2.nodes import Literal
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, END, StateGraph
 from langgraph.prebuilt import ToolNode
+
+from examples.factory.ai_factory import create_ai
 
 
 @tool
@@ -26,7 +26,7 @@ def should_continue(state: MessagesState) -> str:
 
 tools = [search_online]
 tool_node = ToolNode(tools)
-llm = ChatTongyi(max_retries=5).bind_tools(tools=tools)
+llm = create_ai()
 
 
 def call_llm(state: MessagesState):
@@ -54,7 +54,7 @@ ui = {"messages": [HumanMessage(content="北京天气怎么样？")]}
 
 final_state = app.invoke(input=ui, config={"configurable": {"thread_id": 42}})
 
-result = final_state["messages"][-1].content
+result = final_state["messages"][-1].title
 
 graph_png = app.get_graph().draw_mermaid_png()
 with open("graph.png", "wb") as f:
