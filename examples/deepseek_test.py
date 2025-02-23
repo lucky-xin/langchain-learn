@@ -1,4 +1,3 @@
-from langchain_core.prompts import ChatPromptTemplate
 # from langchain_openai import OpenAI
 
 from openai import OpenAI

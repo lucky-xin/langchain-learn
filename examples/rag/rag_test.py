@@ -71,14 +71,6 @@ for msg in st.session_state.messages:
 tool = create_retriever_tool(retriever, "文档检索", "用于检索用户提出的问题，并基于检索到的文档内容进行回复")
 tools = [tool]
 
-msgs = StreamlitChatMessageHistory()
-memory = ConversationBufferMemory(
-    memory_key="chat_history",
-    return_messages=True,
-    output_key="output",
-    chat_memory=msgs
-)
-
 # 指令模板
 instructions = """您是一个设计用于査询文档来回答问题的代理您可以使用文档检索工具，
 并基于检索内容来回答问题您可能不查询文档就知道答案，但是您仍然应该查询文档来获得答案。
@@ -126,6 +118,13 @@ base_prompt = PromptTemplate.from_template(base_prompt_template)
 prompt = base_prompt.partial(instructions=instructions)
 llm = create_ai()
 
+msgs = StreamlitChatMessageHistory()
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    output_key="output",
+    chat_memory=msgs
+)
 agent = create_react_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(
     agent=agent,
