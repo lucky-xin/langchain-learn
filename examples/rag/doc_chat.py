@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Iterable
 
 import streamlit as st
 from langchain import hub
@@ -32,7 +32,7 @@ def create_vector_store() -> VectorStore:
 
 
 # Write uploaded file in temp dir
-def write_file(fp: str, content):
+def write_file(fp: str, content: bytes):
     try:
         with open(fp, 'wb') as file:
             file.write(content)
@@ -43,7 +43,7 @@ def write_file(fp: str, content):
 
 
 # loading PDF, DOCX and TXT files as LangChain Documents
-def load_documents(file) -> list[Document]:
+def load_documents(file: str) -> list[Document]:
     _, extension = os.path.splitext(file)
     if extension == '.pdf':
         from langchain_community.document_loaders import PyPDFLoader
@@ -63,18 +63,10 @@ def load_documents(file) -> list[Document]:
 
 
 # splitting data in chunks
-def split_documents(data, chunk_size=2000, chunk_overlap=200) -> List[Document]:
+def split_documents(data: Iterable[Document], chunk_size=2000, chunk_overlap=200) -> List[Document]:
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return text_splitter.split_documents(data)
-
-
-# create embeddings using OpenAIEmbeddings() and save them in a Chroma vector store
-def add_documents(store: VectorStore, docs: List[Document]):
-    # if you want to use a specific directory for chromadb
-    # vector_store = Chroma.from_documents(chunks, embeddings, persist_directory='./mychroma_db')
-    store.add_documents(docs)
-
 
 # clear the chat history from streamlit session state
 def clear_history():
@@ -84,7 +76,7 @@ def clear_history():
 
 
 # calculate embedding cost using tiktoken
-def calculate_embedding_cost(texts):
+def calculate_embedding_cost(texts: Iterable[Document]):
     import tiktoken
     enc = tiktoken.encoding_for_model('text-embedding-ada-002')
     total_tokens = sum([len(enc.encode(page.page_content)) for page in texts])
