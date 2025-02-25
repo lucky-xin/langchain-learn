@@ -13,7 +13,7 @@ from langgraph.graph import add_messages, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_ai_with_callbacks
 
 
 class State(TypedDict):
@@ -192,11 +192,11 @@ def is_uncertain(llm_response: str) -> bool:
 
 
 class HumanInterventionHandler(BaseCallbackHandler):
-    def on_llm_end(self, response, **kwargs):
-        if is_uncertain(response.generations[0][0].text):
+    def on_llm_end(self, resp, **kwargs):
+        if is_uncertain(resp.generations[0][0].text):
             st.session_state.human_input_requested = True
             st.session_state.pending_human_input = True
-            st.session_state.uncertain_response = response.generations[0][0].text
+            st.session_state.uncertain_response = resp.generations[0][0].text
 
 
 def process_human_intervention():
@@ -211,7 +211,7 @@ def process_human_intervention():
         with st.form(key=f"human_intervention_form_{st.session_state.form_id}"):
             st.markdown("""The AI provided this response but wasn't confident.
             Please review and modify as needed:""")
-            human_input = st.text_area(
+            q = st.text_area(
                 "Expert Review:",
                 value=initial_response,
                 height=200
@@ -228,19 +228,19 @@ def process_human_intervention():
 
             submitted = st.form_submit_button("Submit Expert Review")
 
-            if submitted and human_input:
+            if submitted and q:
                 # Add human response to chat history
                 st.session_state.messages.append({
                     "role": "human-expert",
-                    "content": human_input
+                    "content": q
                 })
-            st.session_state.human_response = human_input
-            st.session_state.waiting_for_human = False
-            # Clear the stored uncertain response
-            st.session_state.uncertain_response = None
-            st.session_state.form_id = str(uuid.uuid4())
-            st.rerun()
-            return True
+                st.session_state.human_response = q
+                st.session_state.waiting_for_human = False
+                # Clear the stored uncertain response
+                st.session_state.uncertain_response = None
+                st.session_state.form_id = str(uuid.uuid4())
+                st.rerun()
+                return True
     return False
 
 
@@ -254,9 +254,9 @@ def human_intervention(state: State):
         return {"messages": [AIMessage(content="Requesting expert review...")]}
 
     if st.session_state.human_response:
-        response = st.session_state.human_response
+        resp = st.session_state.human_response
         st.session_state.human_response = None
-        return {"messages": [HumanMessage(content=response)]}
+        return {"messages": [HumanMessage(content=resp)]}
 
     return {"messages": []}
 
@@ -286,24 +286,25 @@ def chatbot(state: State):
         return {"messages": []}
 
     messages = state["messages"]
-    response = llm_with_tools.invoke(messages)
+    resp = llm_with_tools.invoke(messages)
 
-    if is_uncertain(response.content):
+    if is_uncertain(resp.content):
         st.session_state.waiting_for_human = True
-        # Store the uncertain response for the intervention form
-        st.session_state.uncertain_response = response.content
+        # Store the uncertain resp for the intervention form
+        st.session_state.uncertain_response = resp.content
         st.session_state.messages.append({
             "role": "assistant",
-            "content": """I'm not completely confident about this response.
+            "content": """I'm not completely confident about this resp.
             Requesting expert review..."""
         })
         return {"messages": [AIMessage(content="Requesting expert review...")]}
 
-    return {"messages": [response]}
+    return {"messages": [resp]}
 
 
 # Initialize LLM with the handler
-llm = create_ai()
+callbacks = [HumanInterventionHandler()]
+llm = create_ai_with_callbacks(callbacks)
 # Initialize Google Search tool
 search = DuckDuckGoSearchResults()
 search_tool = Tool(
@@ -312,13 +313,14 @@ search_tool = Tool(
     func=search.run,
 )
 llm_with_tools = llm.bind_tools([search_tool, replace_sim])
+
 # Initialize session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "graph" not in st.session_state:
     st.session_state.graph = None
 if "waiting_for_human" not in st.session_state:
-    st.session_state.waiting_for_human = True
+    st.session_state.waiting_for_human = False
 if "human_response" not in st.session_state:
     st.session_state.human_response = None
 if "form_id" not in st.session_state:
@@ -405,7 +407,7 @@ if not st.session_state.waiting_for_human:
         # Process through graph
         try:
             for event in st.session_state.graph.stream(
-                    {"messages": [HumanMessage(content=prompt)]},
+                    input={"messages": [HumanMessage(content=prompt)]},
                     config={"configurable": {"thread_id": "1"}}
             ):
                 for value in event.values():

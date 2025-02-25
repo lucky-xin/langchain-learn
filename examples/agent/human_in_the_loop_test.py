@@ -7,11 +7,16 @@ from langgraph.constants import START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition, create_react_agent
-from langgraph.types import interrupt
+from langgraph.types import interrupt, Command
 from typing_extensions import TypedDict
-from typish import State
 
 from examples.factory.ai_factory import create_ai
+
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
 
 
 @tool
@@ -24,18 +29,16 @@ def chatbot(state: State):
     assert len(message.tool_calls) <= 1
     return {"messages": [message]}
 
-
-@tool
 # Note that because we are generating a ToolMessage for a state update, we
 # generally require the ID of the corresponding tool call. We can use
 # LangChain's InjectedToolCallId to signal that this argument should not
 # be revealed to the model in the tool's schema.
+@tool
 def human_assistance(query: str) -> str:
     """Request assistance from a human."""
-    human_response = interrupt({"query": query})
-    print(f"Human response: {human_response}")
-    return human_response["data"]
-
+    resp = interrupt({"query": query})
+    print(f"resp:{resp}")
+    return resp["data"]
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -87,14 +90,14 @@ except Exception:
     # This requires some extra dependencies and is optional
     pass
 
-user_input = "I need some expert guidance for building an AI agent. Could you request assistance for me?"
-config = {"configurable": {"thread_id": "1"}}
-
-events = graph.stream(
-    {"messages": [{"role": "user", "content": user_input}]},
-    config,
-    stream_mode="values",
+human_response = (
+    "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent."
+    " It's much more reliable and extensible than simple autonomous agents."
 )
+
+human_command = Command(resume={"data": human_response})
+config = {"configurable": {"thread_id": "1"}}
+events = graph.stream(human_command, config, stream_mode="values")
 for event in events:
     if "messages" in event:
         event["messages"][-1].pretty_print()

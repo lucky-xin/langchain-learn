@@ -2,8 +2,6 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
-from examples.factory.ai_factory import create_ai
-
 
 class Joke(BaseModel):
     setup: str = Field(description="设置笑话的问题")
