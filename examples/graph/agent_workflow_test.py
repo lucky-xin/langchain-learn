@@ -11,6 +11,9 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
 
+from examples.factory.ai_factory import create_ai
+
+
 class WikiInputs(BaseModel):
     """Inputs to the wikipedia tool."""
     query: str = Field(description="query to look up in Wikipedia, should be 3 or less words")
