@@ -98,7 +98,10 @@ with open("prompt_gen_agent.png", "wb") as f:
     f.write(graph_png)
 
 config = {"configurable": {"thread_id": str(uuid.uuid4()), "recursion_limit": 50}}
-
+# 目的:['收集客户满意度反馈']
+# 变量:['客户名称'、"瓦动日期'、"提供的服务'、'评级(1-5 级)'、'评论']
+# 约束:["输出不应包含客户的任何个人身份信息(PII)。']
+# 要求:['输出必须包含结构化格式，其中包含上述每个变量的字段。']
 while True:
     q = input("请输入用户信息:")
     if q in {'Q', 'q'}:
