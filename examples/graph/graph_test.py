@@ -54,7 +54,7 @@ ui = {"messages": [HumanMessage(content="北京天气怎么样？")]}
 
 final_state = app.invoke(input=ui, config={"configurable": {"thread_id": 42}})
 
-result = final_state["messages"][-1].title
+result = final_state["messages"][-1].content
 
 graph_png = app.get_graph().draw_mermaid_png()
 with open("graph.png", "wb") as f:
