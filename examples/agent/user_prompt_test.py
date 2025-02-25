@@ -35,12 +35,12 @@ class PromptInstructions(BaseModel):
     requirements: List[str]
 
 
-def get_messages_info(messages: [BaseMessage]):
+def get_messages_info(messages: List[BaseMessage]):
     return [SystemMessage(content=prompt_text)] + messages
 
 
 # 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
-def get_prompt_messages(messages: [BaseMessage]):
+def get_prompt_messages(messages: List[BaseMessage]):
     reqs = None
     other_msgs = []
     for m in messages:
@@ -54,10 +54,10 @@ def get_prompt_messages(messages: [BaseMessage]):
 
 
 # 定义一个函数，用于获取当前状态
-def get_state(messages: [BaseMessage]) -> Literal["add_tool_message", "info", "__end__"]:
+def get_state(messages: List[BaseMessage]) -> Literal["add_tool_message", "info", "__end__"]:
     if isinstance(messages[-1], AIMessage) and messages[-1].tool_calls:
         return "add_tool_message"
-    elif not isinstance(messages[-1], HumanMessage):
+    elif not isinstance(messages[0], HumanMessage):
         return END
     return "info"
 
@@ -114,7 +114,7 @@ while True:
             stream_mode="updates",
     ):
         last_message = next(iter(output.values()))
-        last_message.print()
+        print(last_message.content)
 
         if output and "prompt" in output:
             print("prompt:", output["prompt"].content)
