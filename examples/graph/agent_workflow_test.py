@@ -107,6 +107,7 @@ agent_executor = create_react_agent(
     messages_modifier=prompt
 )
 
+
 async def main():
     async def plan_step(state: PlanExecute):
         plan = await planner.ainvoke({"messages": [("user", state["input"])]})
@@ -121,8 +122,9 @@ async def main():
 {plant_content}\n\n你的任务是执行{1}步，{task}。
 """
         agent_response = await agent_executor.ainvoke({"messages": [("user", task_formatted)]})
+        messages = agent_response["messages"]
         return {
-            "past_steps": state["past_steps"] + [(task, agent_response["messages"][-1].title)],
+            "past_steps": state["past_steps"] + [(task, messages[-1].content)],
         }
 
     async def replan_step(state: PlanExecute):

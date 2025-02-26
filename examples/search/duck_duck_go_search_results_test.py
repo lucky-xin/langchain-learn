@@ -6,7 +6,7 @@ from langchain_community.utilities.wikidata import WikidataAPIWrapper
 search_duck_duck_go = DuckDuckGoSearchResults(num_results=5)
 search_wikidata = WikidataQueryRun(api_wrapper=WikidataAPIWrapper())
 
-query = "2024年奥运会100米自由泳决赛冠军是谁？他的家乡是哪里？请用中文答"
+query = "获取过去5年AI软件市场规模 请用中文答"
 
 results = search_duck_duck_go.run(query)
 print(results)
