@@ -1,5 +1,8 @@
 import matplotlib.pyplot as plt
 
+plt.rcParams['font.sans-serif'] = ['STFangsong']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+
 # 数据
 years = [2020, 2021, 2022, 2023, 2024]
 market_sizes_usd = [0, 0, 0, 830.8, 1316.2]  # 如果正常没有2020-2022年的数据，我们使用0以表示空值
