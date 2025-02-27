@@ -43,17 +43,10 @@ class GenState(TypedDict):
     canceled: bool
     ask: str
 
-
-class WikiInputs(BaseModel):
-    """Inputs to the wikipedia tool."""
-    query: str = Field(description="query to look up in Wikipedia, should be 3 or less words")
-
-
 tools = [
     WikipediaQueryRun(
         name="wiki-tool",
         description="look up things in wikipedia",
-        args_schema=WikiInputs,
         api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100),
     ),
     DuckDuckGoSearchResults(),
@@ -113,8 +106,6 @@ edit_prompt = ChatPromptTemplate.from_messages(
 edit_agent = edit_prompt | create_ai().with_structured_output(schema=EditResp)
 
 
-
-
 async def create_ppt_gen_graph() -> StateGraph:
     generator_key = "generator"
     user_key = "user"
@@ -167,7 +158,10 @@ async def create_ppt_gen_graph() -> StateGraph:
     with open("agent_workflow.png", "wb") as f:
         f.write(graph_png)
 
-    config = {"configurable": {"thread_id": "thread-1", "recursion_limit": 50}}
+    config = {
+        "configurable": {"thread_id": "thread-1"},
+        "recursion_limit": 50
+    }
     inputs = {
         "topic": "人工智能",
         "num": 3,

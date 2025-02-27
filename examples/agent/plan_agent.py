@@ -13,12 +13,6 @@ from pydantic import BaseModel, Field
 
 from examples.factory.ai_factory import create_ai
 
-
-class WikiInputs(BaseModel):
-    """Inputs to the wikipedia tool."""
-    query: str = Field(description="query to look up in Wikipedia, should be 3 or less words")
-
-
 class PlanExecute(TypedDict):
     input: str
     plan: List[str]
@@ -49,7 +43,6 @@ tools = [
     WikipediaQueryRun(
         name="wiki-tool",
         description="look up things in wikipedia",
-        args_schema=WikiInputs,
         api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100),
     ),
     DuckDuckGoSearchResults(),

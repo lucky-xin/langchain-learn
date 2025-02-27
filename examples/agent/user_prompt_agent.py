@@ -30,7 +30,6 @@ def get_streamlit_cb(parent_container: DeltaGenerator) -> BaseCallbackHandler:
         def wrapper(*args, **kwargs) -> fn_return_type:
             add_script_run_ctx(ctx=ctx)
             return fn(*args, **kwargs)
-
         return wrapper
 
     st_cb = StreamlitCallbackHandler(
@@ -181,9 +180,9 @@ def invoke(user_input: str):
     with st.chat_message("assistant"):
         st_cb = get_streamlit_cb(st.container())
         config = {
+            "recursion_limit": 50,
             "configurable": {
                 "run_id": st.session_state.run_id,
-                "recursion_limit": 50,
                 "thread_id": str(threading.current_thread().ident)
             },
             "callbacks": [st_cb]

@@ -20,7 +20,7 @@ class AgentState(TypedDict):
     sender: str
 
 
-def agent_node(state, agent, name):
+def agent_node(state: AgentState, agent: BaseChatOpenAI, name: str):
     # 调用代型
     result = agent.invoke(state)
     # 检查 result 是否是 ToolMessage 类型的实例
@@ -40,7 +40,7 @@ def agent_node(state, agent, name):
     }
 
 
-def router(state) -> Literal["call_tool", "__end__", "continue"]:
+def router(state: AgentState) -> Literal["call_tool", "__end__", "continue"]:
     # 这是路山器
     messages = state["messages"]
     last_message = messages[-1]

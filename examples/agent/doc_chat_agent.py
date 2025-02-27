@@ -15,15 +15,9 @@ from langchain_core.prompts import BasePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import create_retriever_tool
 from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
-from pydantic import BaseModel, Field
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from examples.factory.ai_factory import create_ai
-
-
-class WikiInputs(BaseModel):
-    """Inputs to the wikipedia tool."""
-    query: str = Field(description="query to look up in Wikipedia, should be 3 or less words")
 
 
 def create_vector_store() -> VectorStore:
@@ -117,7 +111,6 @@ def create_agent(retriever: BaseRetriever) -> AgentExecutor:
         WikipediaQueryRun(
             name="wiki-tool",
             description="look up things in wikipedia",
-            args_schema=WikiInputs,
             api_wrapper=WikipediaAPIWrapper(top_k_results=1, doc_content_chars_max=100),
         ),
         DuckDuckGoSearchResults()
