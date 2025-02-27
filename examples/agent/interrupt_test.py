@@ -240,7 +240,6 @@ def process_human_intervention():
                 st.session_state.uncertain_response = None
                 st.session_state.form_id = str(uuid.uuid4())
                 st.rerun()
-                return True
     return False
 
 
@@ -399,15 +398,15 @@ for message in st.session_state.messages:
 
 # Only show chat input if not waiting for human intervention
 if not st.session_state.waiting_for_human:
-    if prompt := st.chat_input("What's up?"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    if q := st.chat_input("What's up?"):
+        st.session_state.messages.append({"role": "user", "content": q})
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(q)
 
         # Process through graph
         try:
             for event in st.session_state.graph.stream(
-                    input={"messages": [HumanMessage(content=prompt)]},
+                    input={"messages": [HumanMessage(content=q)]},
                     config={"configurable": {"thread_id": "1"}}
             ):
                 for value in event.values():
