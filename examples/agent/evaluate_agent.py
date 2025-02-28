@@ -40,7 +40,7 @@ class PromptInstructions(BaseModel):
     reg_time: str = Field(description="车上牌时间，格式为yyyyMMdd,如：20210401")
 
 
-def create_prompt(params:dict[str,str]=None) -> BasePromptTemplate:
+def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     return ChatPromptTemplate.from_messages(
         [
             (
@@ -79,20 +79,20 @@ def create_prompt(params:dict[str,str]=None) -> BasePromptTemplate:
                     6. **行驶里程（万公里）**：用户告知的行驶里程；
                     不需要确认的信息可以不用显示出来。
                 SQL表元数据如下：
-                    品牌表ref_old_brand：
+                    品牌表-{brand_table_name}：
                         id varchar(32) '品牌id'；
                         abbr_en_name varchar(100) '品牌英文全称'；
                         en_name varchar(100) '品牌英文全称'；
                         cn_name varchar(100) '品牌中文全称'；
                         valid varchar(10) '数据是否有效，true为有效'；
-                    车型表ref_old_model：
+                    车型表-{model_table_name}：
                         id varchar(32) '主键'
                         cn_name varchar(100) '英文名称'
                         en_name varchar(100) '中文名称'
                         brand_id varchar(32) '表ref_old_brand的主键',
                         on_sale_flag varchar(10) '是否在售，true表示在售'
                         valid varchar(100) '是否有效，true表示数据有效'
-                    车型号表ref_old_basictrim：
+                    车型号表-{trim_table_name}：
                         id varchar(32) '主键';
                         cn_name varchar(1000) '车型号中文全称';
                         en_name varchar(1000) '车型号英文全称';
@@ -101,14 +101,19 @@ def create_prompt(params:dict[str,str]=None) -> BasePromptTemplate:
                         on_sale_flag varchar(10) '是否在售标识，true表示在售';
                         model_id varchar(100) '表ref_old_model的主键';
                         valid varchar(100) '是否有效，true表示数据有效'
-                    城市表ref_old_city:
+                    城市表-{city_table_name}:
                         id varchar(32) '主键'；
                         valid varchar(100) '是否有效，true表示数据有效'；
                         abbr_cn_name varchar(32) '中文简称'；
                         cn_name varchar(32) '中文全称'；
                         en_name varchar(100) '英文全称'；
                 当你能够辨别所有信息，并跟用户确认数据没有问题之后，并调用相关工具；
-                """.format(params)
+                """.format(
+                    brand_table_name=args["brand_table_name"],
+                    model_table_name=args["model_table_name"],
+                    trim_table_name=args["trim_table_name"],
+                    city_table_name=args["city_table_name"],
+                )
             ),
             ("placeholder", "{messages}"),
         ]
@@ -151,7 +156,7 @@ sql_db_query = create_sql_tool()
 
 llm = create_ai()
 llm_with_tool = llm.bind_tools([PromptInstructions, sql_db_query])
-
+user_info_chain = create_prompt() | llm_with_tool
 
 # 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
 def get_evaluate_messages(state: State):
@@ -290,8 +295,7 @@ def get_user_info_chain(state: State):
         print("get_user_info_chain.pretty_print------------------- start")
         msg.pretty_print()
     print("get_user_info_chain.pretty_print------------------- end")
-    chain = create_prompt() | llm_with_tool
-    resp = chain.invoke({"messages": messages})
+    resp = user_info_chain.invoke({"messages": messages})
 
     print("get_user_info_chain------------------- resp")
     print(resp.pretty_print())
