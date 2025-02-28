@@ -1,46 +1,19 @@
-import inspect
 import threading
 import uuid
-from typing import Callable, TypeVar
 from typing import List, Annotated
 
 import streamlit as st
-from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
-from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage, HumanMessage, BaseMessage, AIMessageChunk
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langgraph.constants import START
 from langgraph.graph import END, add_messages, StateGraph
 from pydantic import BaseModel, Field
-from streamlit.delta_generator import DeltaGenerator
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 from typing_extensions import TypedDict
 
 from examples.agent.postgres_saver_factory import create_checkpointer
+from examples.agent.streamlit_callback_utils import get_streamlit_cb
 from examples.factory.ai_factory import create_ai
-
-
-def get_streamlit_cb(parent_container: DeltaGenerator) -> BaseCallbackHandler:
-    fn_return_type = TypeVar('fn_return_type')
-
-    def add_streamlit_context(fn: Callable[..., fn_return_type]) -> Callable[..., fn_return_type]:
-        ctx = get_script_run_ctx()
-
-        def wrapper(*args, **kwargs) -> fn_return_type:
-            add_script_run_ctx(ctx=ctx)
-            return fn(*args, **kwargs)
-        return wrapper
-
-    st_cb = StreamlitCallbackHandler(
-        parent_container=parent_container,
-        collapse_completed_thoughts=False,
-    )
-
-    for method_name, method_func in inspect.getmembers(st_cb, predicate=inspect.ismethod):
-        if method_name.startswith('on_'):
-            setattr(st_cb, method_name, add_streamlit_context(method_func))
-    return st_cb
 
 
 class State(TypedDict):
