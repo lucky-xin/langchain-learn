@@ -15,7 +15,7 @@ from langgraph.graph import END, add_messages, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, URL
+from sqlalchemy import create_engine, URL, util
 from typing_extensions import TypedDict
 
 from examples.factory.ai_factory import create_ai
@@ -41,80 +41,78 @@ class PromptInstructions(BaseModel):
 
 
 def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
+    msg = """
+你是一个二手车估值服务助手，你的工作是从用户那里获取估值请求API所需的参数：
+    - 车型号id (可能的其他叫法：trimId，trim_id或者trim id)
+    - 城市id (可能的其他叫法：cityId，city_id或者city id)
+    - 颜色id(可能的其他叫法：colorId，color_id或者color id)
+    - 行驶里程
+    - 车上牌时间                      
+你要尽最大努力获取足够多的信息，以完成下一步工作，如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+确认车型号步骤如下：
+    1.一旦你能确认了车型号id(trim_id)，你就需要用trim_id填充以下trim_id变量，并执行以下SQL获取信息:
+        SELECT 
+            {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name, {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
+        FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
+                               JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
+        WHERE {trim_table_name}.id = {{{{trim_id}}}}
+    2.如果用户没有告诉你车型号id，你就需要对输入的文本进行识别,如果他们可能是车型号或者车型名称，你就要进行合理的切分，然后再去表{trim_table_name}中对cn_name和en_name和id进行模糊匹配，查询条件应该为: cn_name like '%XX%' OR en_name like '%XX%' OR id like '%XX%'，获取id和cn_name并跟用户确认具体的型号；
+    3.如果用户没有告你车型号信息，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
+确认城市id步骤如下：
+    1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
+        SELECT 
+            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
+        FROM {city_table_name} 
+        WHERE {city_table_name}.id = {{{{city_id}}}}
+    2.如果用户没有告诉你城市id，你就需要对输入的文本进行识别,如果他们可能是城市名称就对表{city_table_name}中对cn_name和en_name和abbr_cn_name进行模糊匹配，查询条件应该为: cn_name like '%XX%' OR en_name like '%XX%' OR abbr_cn_name like '%XX%'，，获取id和cn_name并跟用户确认具体的城市id；
+
+确认信息格式如下，对于以下变量brand_name、brand_id、model_name、model_id、trim_name、trim_id、city_name、city_id你需要用上文查询结果填充以下内容
+    1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
+    2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
+    3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
+    4. **城市**：{{{{city_name}}}}（{{{{city_id}}}}）
+    5. **颜色**：目前默认都为：黑色（Col09）
+    6. **行驶里程（万公里）**：用户告知的行驶里程；
+    不需要确认的信息可以不用显示出来。
+SQL表元数据如下：
+    品牌表-{brand_table_name}：
+        id varchar(32) '品牌id'；
+        abbr_en_name varchar(100) '品牌英文全称'；
+        en_name varchar(100) '品牌英文全称'；
+        cn_name varchar(100) '品牌中文全称'；
+        valid varchar(10) '数据是否有效，true为有效'；
+    车型表-{model_table_name}：
+        id varchar(32) '主键'
+        cn_name varchar(100) '英文名称'
+        en_name varchar(100) '中文名称'
+        brand_id varchar(32) '表ref_old_brand的主键',
+        on_sale_flag varchar(10) '是否在售，true表示在售'
+        valid varchar(100) '是否有效，true表示数据有效'
+    车型号表-{trim_table_name}：
+        id varchar(32) '主键';
+        cn_name varchar(1000) '车型号中文全称';
+        en_name varchar(1000) '车型号英文全称';
+        abbr_cn_name varchar(1000) '车型号中文简称';
+        abbr_en_name varchar(1000) '车型号英文简称';
+        on_sale_flag varchar(10) '是否在售标识，true表示在售';
+        model_id varchar(100) '表ref_old_model的主键';
+        valid varchar(100) '是否有效，true表示数据有效'
+    城市表-{city_table_name}:
+        id varchar(32) '主键'；
+        valid varchar(100) '是否有效，true表示数据有效'；
+        abbr_cn_name varchar(32) '中文简称'；
+        cn_name varchar(32) '中文全称'；
+        en_name varchar(100) '英文全称'；
+当你能够辨别所有信息，并跟用户确认数据没有问题之后，并调用相关工具；
+""".format(
+        brand_table_name=args["brand_table_name"],
+        model_table_name=args["model_table_name"],
+        trim_table_name=args["trim_table_name"],
+        city_table_name=args["city_table_name"],
+    )
     return ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                """
-                你是一个二手车估值服务助手，你的工作是从用户那里获取估值请求API所需的参数：
-                    - 车型号id (可能的其他叫法：trimId，trim_id或者trim id)
-                    - 城市id (可能的其他叫法：cityId，city_id或者city id)
-                    - 颜色id(可能的其他叫法：colorId，color_id或者color id)
-                    - 行驶里程
-                    - 车上牌时间                      
-                你要尽最大努力获取足够多的信息，以完成下一步工作，如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
-                确认车型号步骤如下：
-                    1.一旦你能确认了车型号id(trim_id)，你就需要用trim_id填充以下trim_id变量，并执行以下SQL获取信息:
-                        SELECT 
-                            {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name, {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
-                        FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
-                                               JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
-                        WHERE {trim_table_name}.id = {{trim_id}} 
-                    2.如果用户没有告诉你车型号id，你就需要对输入的文本进行识别,如果他们可能是车型号或者车型名称，你就要进行合理的切分，然后再去表{trim_table_name}中对cn_name和en_name和id进行模糊匹配，连接条件为or，获取id和cn_name并跟用户确认具体的型号；
-                    3.如果用户没有告你车型号信息，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
-                确认城市id步骤如下：
-                    1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
-                        SELECT 
-                            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
-                        FROM {city_table_name} 
-                        WHERE {city_table_name}.id = {{city_id}}
-                    2.如果用户没有告诉你城市id，你就需要对输入的文本进行识别,如果他们可能是城市名称就对表{city_table_name}中对cn_name和en_name和abbr_cn_name进行模糊匹配，连接条件为or，获取id和cn_name并跟用户确认具体的城市id；
-
-                确认信息格式如下，对于以下变量brand_name、brand_id、model_name、model_id、trim_name、trim_id、city_name、city_id你需要用上文查询结果填充以下内容
-                    1. **品牌**：{{brand_name}}（{{brand_id}}）
-                    2. **车型**：{{model_name}}（{{model_id}}）
-                    3. **车型号**：{{trim_name}}（{{trim_id}}）
-                    4. **城市**：{{city_name}}（{{city_id}}）
-                    5. **颜色**：目前默认都为：黑色（Col09）
-                    6. **行驶里程（万公里）**：用户告知的行驶里程；
-                    不需要确认的信息可以不用显示出来。
-                SQL表元数据如下：
-                    品牌表-{brand_table_name}：
-                        id varchar(32) '品牌id'；
-                        abbr_en_name varchar(100) '品牌英文全称'；
-                        en_name varchar(100) '品牌英文全称'；
-                        cn_name varchar(100) '品牌中文全称'；
-                        valid varchar(10) '数据是否有效，true为有效'；
-                    车型表-{model_table_name}：
-                        id varchar(32) '主键'
-                        cn_name varchar(100) '英文名称'
-                        en_name varchar(100) '中文名称'
-                        brand_id varchar(32) '表ref_old_brand的主键',
-                        on_sale_flag varchar(10) '是否在售，true表示在售'
-                        valid varchar(100) '是否有效，true表示数据有效'
-                    车型号表-{trim_table_name}：
-                        id varchar(32) '主键';
-                        cn_name varchar(1000) '车型号中文全称';
-                        en_name varchar(1000) '车型号英文全称';
-                        abbr_cn_name varchar(1000) '车型号中文简称';
-                        abbr_en_name varchar(1000) '车型号英文简称';
-                        on_sale_flag varchar(10) '是否在售标识，true表示在售';
-                        model_id varchar(100) '表ref_old_model的主键';
-                        valid varchar(100) '是否有效，true表示数据有效'
-                    城市表-{city_table_name}:
-                        id varchar(32) '主键'；
-                        valid varchar(100) '是否有效，true表示数据有效'；
-                        abbr_cn_name varchar(32) '中文简称'；
-                        cn_name varchar(32) '中文全称'；
-                        en_name varchar(100) '英文全称'；
-                当你能够辨别所有信息，并跟用户确认数据没有问题之后，并调用相关工具；
-                """.format(
-                    brand_table_name=args["brand_table_name"],
-                    model_table_name=args["model_table_name"],
-                    trim_table_name=args["trim_table_name"],
-                    city_table_name=args["city_table_name"],
-                )
-            ),
+            ("system", msg),
             ("placeholder", "{messages}"),
         ]
     )
@@ -135,8 +133,17 @@ params = {
 
 def create_sql_tool() -> BaseTool:
     url = URL(
-
+        drivername="mysql+pymysql",
+        host="",
+        port=3306,
+        database="masterdata",
+        username="",
+        password="",
+        query=util.immutabledict({
+            "charset": "utf8mb4",
+        })
     )
+
     engine = create_engine(
         url=url,
         pool_recycle=3600,
@@ -156,7 +163,7 @@ sql_db_query = create_sql_tool()
 
 llm = create_ai()
 llm_with_tool = llm.bind_tools([PromptInstructions, sql_db_query])
-user_info_chain = create_prompt() | llm_with_tool
+user_info_chain = create_prompt(params) | llm_with_tool
 
 # 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
 def get_evaluate_messages(state: State):
