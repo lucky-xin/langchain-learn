@@ -1,3 +1,4 @@
+import os
 import threading
 import uuid
 from typing import List, Annotated
@@ -49,22 +50,38 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     - 行驶里程
     - 车上牌时间                      
 你要尽最大努力获取足够多的信息，以完成下一步工作，如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+
 确认车型号步骤如下：
     1.一旦你能确认了车型号id(trim_id)，你就需要用trim_id填充以下trim_id变量，并执行以下SQL获取信息:
         SELECT 
-            {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name, {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
+            {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
+            {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
         FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
         WHERE {trim_table_name}.id = {{{{trim_id}}}}
-    2.如果用户没有告诉你车型号id，你就需要对输入的文本进行识别,如果他们可能是车型号或者车型名称，你就要进行合理的切分，然后再去表{trim_table_name}中对cn_name和en_name和id进行模糊匹配，查询条件应该为: cn_name like '%XX%' OR en_name like '%XX%' OR id like '%XX%'，获取id和cn_name并跟用户确认具体的型号；
-    3.如果用户没有告你车型号信息，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
+    2.一旦步骤1中查询到数据你就要进入信息确认流程，让用户进行确认。用户确认之后，你就不要再重复获取车型号流程；
+    3.如果用户没有告诉你车型号id，你要对输入的文本进行识别,然后进行合理的切分，再去表{trim_table_name}中对cn_name和en_name和id进行模糊匹配，获取前10条记录，生成查询条件例子如下，要把XX替换成你识别出来的关键字: 
+        SELECT 
+            {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
+        FROM {trim_table_name}
+        WHERE cn_name like '%XX%' OR en_name like '%XX%' OR id like '%XX%' 
+        LIMIT 10
+        查询结果集为多个时你就要以列表展示给用户，让用户选择并确认具体的车型号id，如果查询不到数据就不要给用户展示结果。
+    4.如果步骤1和步骤3都查询不到数据，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
+    
 确认城市id步骤如下：
     1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
         SELECT 
             {city_table_name}.id city_id, {city_table_name}.cn_name city_name
         FROM {city_table_name} 
         WHERE {city_table_name}.id = {{{{city_id}}}}
-    2.如果用户没有告诉你城市id，你就需要对输入的文本进行识别,如果他们可能是城市名称就对表{city_table_name}中对cn_name和en_name和abbr_cn_name进行模糊匹配，查询条件应该为: cn_name like '%XX%' OR en_name like '%XX%' OR abbr_cn_name like '%XX%'，，获取id和cn_name并跟用户确认具体的城市id；
+    2.如果步骤1查询不到数据，你要对输入的文本进行识别,然后进行合理的切分。然后对表{city_table_name}中cn_name、en_name和abbr_cn_name进行模糊匹配，获取前10条记录，生成查询SQL如下，要把XX替换成你识别出来的关键字:
+        SELECT 
+            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
+        FROM {city_table_name} 
+        WHERE cn_name like '%XX%' OR en_name like '%XX%' OR abbr_cn_name like '%XX%'
+        LIMIT 10
+        查询结果集为多个时你就要以列表展示给用户，让用户选择并确认具体的城市id，如果查询不到数据就不要给用户展示结果。
 
 确认信息格式如下，对于以下变量brand_name、brand_id、model_name、model_id、trim_name、trim_id、city_name、city_id你需要用上文查询结果填充以下内容
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
@@ -131,14 +148,15 @@ params = {
     "city_table_name": "ref_old_city",
 }
 
+
 def create_sql_tool() -> BaseTool:
     url = URL(
         drivername="mysql+pymysql",
-        host="",
+        host=os.getenv("MYSQL_HOST"),
         port=3306,
-        database="masterdata",
-        username="",
-        password="",
+        database=os.getenv("MYSQL_DB"),
+        username=os.getenv("MYSQL_USR"),
+        password=os.getenv("MYSQL_PWD"),
         query=util.immutabledict({
             "charset": "utf8mb4",
         })
@@ -151,19 +169,18 @@ def create_sql_tool() -> BaseTool:
     )
     db = SQLDatabase(
         engine=engine,
-        include_tables=["ref_old_brand", "ref_old_model", "ref_old_basictrim", "ref_old_city"],  # 白名单过滤
+        include_tables=list(params.values()),
         sample_rows_in_table_info=2  # 在提示词中展示的示例数据行数
     )
-    return QuerySQLDatabaseTool(
-        db=db,
-    )
+    return QuerySQLDatabaseTool(db=db)
 
 
-sql_db_query = create_sql_tool()
+sql_tool = create_sql_tool()
 
 llm = create_ai()
-llm_with_tool = llm.bind_tools([PromptInstructions, sql_db_query])
+llm_with_tool = llm.bind_tools([PromptInstructions, sql_tool])
 user_info_chain = create_prompt(params) | llm_with_tool
+
 
 # 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
 def get_evaluate_messages(state: State):
@@ -311,11 +328,20 @@ def get_user_info_chain(state: State):
 
 def add_sql_tool(state: State):
     print("add_sql_tool-------------------")
+    last_message = state["messages"][-1]
+    tool_call = last_message.tool_calls[0]
+    res = sql_tool.invoke(
+        input={
+            "type": "tool_call",
+            "id": tool_call["id"],
+            "args": tool_call["args"]
+        }
+    )
     return {
         "messages": [
             ToolMessage(
-                content="调用数据库工具获取所需信息",
-                tool_call_id=state["messages"][-1].tool_calls[0]["id"],
+                tool_call_id=tool_call["id"],
+                content="调用数据库工具获取信息如下：\n" + res.content,
             )
         ]
     }
