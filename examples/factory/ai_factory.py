@@ -13,6 +13,15 @@ def create_ai() -> ChatOpenAI:
         temperature=0.0
     )
 
+# def create_ai() -> ChatOpenAI:
+#     return ChatOpenAI(
+#         api_key=os.getenv("HUNYUAN_API_KEY"),
+#         base_url="https://api.lkeap.cloud.tencent.com/v1",
+#         model="deepseek-v3",
+#         temperature=0.0
+#
+#     )
+
 
 def create_ai_with_callbacks(callbacks: list[BaseCallbackHandler]) -> ChatOpenAI:
     return ChatOpenAI(

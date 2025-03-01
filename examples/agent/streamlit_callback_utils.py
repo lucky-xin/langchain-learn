@@ -16,11 +16,14 @@ def get_streamlit_cb(parent_container: DeltaGenerator) -> BaseCallbackHandler:
         def wrapper(*args, **kwargs) -> fn_return_type:
             add_script_run_ctx(ctx=ctx)
             return fn(*args, **kwargs)
+
         return wrapper
 
     st_cb = StreamlitCallbackHandler(
+        max_thought_containers=2,
         parent_container=parent_container,
-        collapse_completed_thoughts=False,
+        collapse_completed_thoughts=True,
+        expand_new_thoughts=False,
     )
 
     for method_name, method_func in inspect.getmembers(st_cb, predicate=inspect.ismethod):
