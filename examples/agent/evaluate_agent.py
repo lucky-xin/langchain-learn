@@ -56,7 +56,7 @@ def create_oauth2() -> OAuth2ResourceOwnerPasswordCredentials:
     session = requests.Session()
     session.headers.update(
         {
-            "Authorization": os.getenv("OAUTH2_AUTHORIZATION_HEADER"),
+            "Authorization": os.getenv("OAUTH2_BASIC_AUTH_HEADER"),
         }
     )
     return OAuth2ResourceOwnerPasswordCredentials(
@@ -84,7 +84,7 @@ SHOW CREATE TABLE `{trim_table_name}`;
 需获取以下参数（注意别名匹配）：
 - 车型号id (别名：trimId，trim_id或者trim id)
 - 城市id (别名：cityId，city_id或者city id)
-- 颜色id(别名：colorId，color_id或者color id)
+- 颜色id (别名：colorId，color_id或者color id)
 - 行驶里程 
 - 车上牌时间（格式为yyyyMMdd）
     
@@ -99,7 +99,7 @@ SHOW CREATE TABLE `{trim_table_name}`;
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
         WHERE {trim_table_name}.id = {{{{trim_id}}}}
     2.一旦步骤1中查询到数据你就要进入信息确认流程，让用户进行确认。用户确认之后，你就不要再重复进入获取车型号信息流程。
-    3.不满足步骤1和步骤2情况下，你要深度思考，对输入的文本进行识别，并进行合理的切分。再对表{trim_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下: 
+    3.不满足步骤1和步骤2情况下，你要深度思考，对输入的文本进行识别，并进行合理的切分，再对表{trim_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下: 
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
