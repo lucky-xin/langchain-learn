@@ -5,11 +5,10 @@ import uuid
 from typing import List, Annotated, Any
 
 import requests
-import streamlit as st
 from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit
 from langchain_community.tools import QuerySQLDatabaseTool
 from langchain_community.utilities import SQLDatabase, TextRequestsWrapper
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, AIMessageChunk, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, SystemMessage
 from langchain_core.messages import ToolMessage
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
@@ -24,7 +23,6 @@ from requests_auth import OAuth2ResourceOwnerPasswordCredentials
 from sqlalchemy import create_engine, URL, util
 from typing_extensions import TypedDict
 
-from examples.agent.streamlit_callback_utils import get_streamlit_cb
 from examples.factory.ai_factory import create_ai
 
 
@@ -418,7 +416,7 @@ def create_evaluate_tool() -> BaseToolkit:
     )
 
 
-def to_tool_message(sur: BaseMessage, prefix: str, tool_call_id: str):
+def to_tool_message(sur: BaseMessage, tool_call_id: str, prefix: str = ""):
     return ToolMessage(
         tool_call_id=tool_call_id,
         content=prefix + sur.content,
@@ -440,7 +438,11 @@ def get_state(state: State) -> str:
         if isinstance(last_message, ToolMessage) and last_message.name == "PromptInstructions":
             return "evaluator"
     last_message = messages[-1]
-    if isinstance(last_message, AIMessage) or not isinstance(last_message, HumanMessage):
+    if isinstance(last_message, AIMessage):
+        if get_ai_message_tool_name(last_message) == "sql_db_query":
+            return "sql_tool"
+        return END
+    elif not isinstance(last_message, HumanMessage):
         return END
     return "info"
 
@@ -451,18 +453,18 @@ You have access to an API to help answer user queries.
 Here is documentation on the API:
 {api_spec}
 """.format(api_spec=create_api_spec())
-    return create_react_agent(st.session_state.llm, create_evaluate_tool().get_tools(), prompt=system_message)
+    return create_react_agent(llm, create_evaluate_tool().get_tools(), prompt=system_message)
 
 
 def get_user_info_chain(state: State):
-    resp = st.session_state.user_info_agent.invoke(state)
+    resp = user_info_agent.invoke(state)
     return resp
 
 
 def sql_tool_chain(state: State):
     last_message = check_message_has_tool(state)
     tool_call = last_message.tool_calls[0]
-    res = st.session_state.sql_tool.invoke(
+    res = sql_tool.invoke(
         input={
             "type": "tool_call",
             "id": tool_call.get("id"),
@@ -471,7 +473,7 @@ def sql_tool_chain(state: State):
     )
     return {
         "messages": [
-            to_tool_message(sur=res, prefix="调用数据库工具获取信息如下：\n", tool_call_id=tool_call["id"])
+            to_tool_message(sur=res, tool_call_id=tool_call["id"], prefix="调用数据库工具获取信息如下：\n")
         ]
     }
 
@@ -484,87 +486,56 @@ def evaluate_chain(state: State):
 {reqs}
 """
     messages = create_tool_call_messages(prompt_system, state)
-    return st.session_state.evaluate_agent.invoke({"messages": messages})
+    return evaluate_agent.invoke({"messages": messages})
 
 
-def init():
-    print("init...")
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "sql_tool" not in st.session_state:
-        st.session_state.sql_tool = create_sql_tool()
-    if "llm" not in st.session_state:
-        st.session_state.llm = create_ai()
-    if "user_info_agent" not in st.session_state:
-        tools = [PromptInstructions, st.session_state.sql_tool]
-        st.session_state.user_info_agent = create_react_agent(st.session_state.llm, tools, prompt=create_prompt(params))
-    if "evaluate_agent" not in st.session_state:
-        st.session_state.evaluate_agent = create_evaluate_agent()
-    # Create graph builder
-    if not st.session_state.get("graph"):
-        print("Creating graph...")
-        # 初始化 MemorySaver 共例
-        workflow = StateGraph(State)
-        workflow.add_node("info", get_user_info_chain)
-        workflow.add_node("evaluator", evaluate_chain)
+sql_tool = create_sql_tool()
+llm = create_ai()
 
-        workflow.add_conditional_edges(
-            source="info",
-            path=get_state,
-            path_map=[
-                "info",
-                "evaluator",
-                END
-            ]
-        )
+tools = [PromptInstructions, sql_tool]
+# st.session_state.user_info_agent = create_prompt(params) | st.session_state.llm.bind_tools(tools)
+user_info_agent = create_react_agent(llm, tools, prompt=create_prompt(params))
+evaluate_agent = create_evaluate_agent()
 
-        workflow.add_edge(START, "info")
-        workflow.add_edge("evaluator", END)
+# 初始化 MemorySaver 共例
+workflow = StateGraph(State)
+workflow.add_node("info", get_user_info_chain)
+workflow.add_node("sql_tool", sql_tool_chain)
+workflow.add_node("evaluator", evaluate_chain)
 
-        # checkpointer = create_checkpointer()
-        checkpointer = MemorySaver()
-        graph = workflow.compile(checkpointer=checkpointer)
-        st.session_state.graph = graph
-        st.session_state.run_id = str(uuid.uuid4())
-        st.session_state.image = st.session_state.graph.get_graph().draw_mermaid_png()
+workflow.add_conditional_edges(
+    source="info",
+    path=get_state,
+    path_map=[
+        "sql_tool",
+        "info",
+        "evaluator",
+        END]
+)
 
-    st.image(
-        image=st.session_state.image,
-        caption="二手车估值助手流程",
-        use_container_width=False
-    )
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
+workflow.add_edge(START, "info")
+workflow.add_edge("sql_tool", "info")
+workflow.add_edge("evaluator", END)
 
+checkpointer = MemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)
 
-def invoke(user_input: str):
-    st.chat_message("user").markdown(user_input)
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    collected_messages = ""
-    with st.chat_message("assistant"):
-        st_cb = get_streamlit_cb(st.container())
-        config = {
-            "recursion_limit": 50,
-            "configurable": {
-                "run_id": st.session_state.run_id,
-                "thread_id": str(threading.current_thread().ident)
-            },
-            "callbacks": [st_cb]
-        }
-        output_placeholder = st.empty()
-        for chunks in st.session_state.graph.stream(
-                input={"messages": [HumanMessage(content=user_input)]},
-                config=config,
-                stream_mode="messages"
-        ):
-            for chunk in chunks:
-                if isinstance(chunk, AIMessageChunk) and chunk.content:
-                    collected_messages += chunk.content
-                    output_placeholder.markdown(collected_messages + "▌")
-            output_placeholder.markdown(collected_messages)
-        st.session_state.messages.append({"role": "assistant", "content": collected_messages})
+config = {
+    "recursion_limit": 50,
+    "configurable": {
+        "run_id": str(uuid.uuid4()),
+        "thread_id": str(threading.current_thread().ident)
+    }
+}
 
-
-init()
-if q := st.chat_input("请输入需求信息"):
-    invoke(q)
+while True:
+    user_input = input("请输入...")
+    for chunks in graph.stream(
+            input={"messages": [HumanMessage(content=user_input)]},
+            config=config,
+            stream_mode="values"
+    ):
+        messages = chunks.get("messages", [])
+        for msg in messages:
+            if isinstance(msg, AIMessage):
+                msg.pretty_print()
