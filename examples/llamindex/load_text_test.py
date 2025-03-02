@@ -1,8 +1,4 @@
-import os
-
-from llama_index.core import SimpleDirectoryReader, download_loader, VectorStoreIndex, ServiceContext, Settings
-from llama_index.llms.openai_like import OpenAILike
-from openai.types.beta import VectorStore
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
 
 documents = SimpleDirectoryReader('data').load_data()
 

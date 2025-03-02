@@ -1,3 +1,4 @@
+import base64
 import os
 
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
@@ -9,71 +10,77 @@ from examples.factory.ai_factory import create_ai
 
 
 def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
-    # 指令模板
-    prompt_template = """
-你是一个二手车估值服务助手，你的工作是从用户那里获取估值请求API所需的参数：
-    - 车型号id (可能的其他叫法：trimId，trim_id或者trim id)
-    - 城市id (可能的其他叫法：cityId，city_id或者city id)
-    - 颜色id(可能的其他叫法：colorId，color_id或者color id)
-    - 行驶里程
-    - 车上牌时间                      
-你要尽最大努力获取足够多的信息，以完成下一步工作，你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+    msg = """
+你是一名专业的SQL语句编写助手，你需通过对用户输入的问题进行深度理解，并按照要求生成SQL。
+只能生成查询语句，不能生成任何delete，insert，update等编辑语句。
 
-确认车型号步骤如下：
-    1.一旦你能确认了车型号id(trim_id)，你就需要用trim_id填充以下trim_id变量，并执行以下SQL获取信息:
+你需获取的估值参数如下（注意别名匹配）：
+- 品牌名称 (用户可能说的别名：brandName，brand_name或者brand name)
+- 品牌id (用户可能说的别名：brandId，brand_id或者brand id)
+- 车型名称 (用户可能说的别名：modelName，model_name或者model name)
+- 车型id (用户可能说的别名：modelId，model_id或者model id)
+- 车型号名称 (用户可能说的别名：trim_name)
+- 车型号id (用户可能说的别名：trimId，trim_id或者trim id)
+- 城市id (用户可能说的别名：cityId，city_id或者city id)
+- 颜色id (用户可能说的别名：colorId，color_id或者color id)
+- 行驶里程 
+- 车上牌时间（格式为yyyyMMdd）
+
+开始时，你应该始终查看{dialect}数据库中表{table_names}的DDL信息，以了解可以查询的内容，不要跳过这一步，你要先执行以下语句获取相关表的模式：SHOW CREATE TABLE table_name。
+
+然后你要按照下文生成SQL。
+
+获取车型号信息SQL生成流程：
+    1.一旦用户跟你确认了trim_id，你就需要用trim_id的值填充以下变量，并生成如下SQL，不要跳过这一步:
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
         FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
-        WHERE {trim_table_name}.id = {{{{trim_id}}}}
-    2.一旦步骤1中查询到数据你就要进入信息确认流程，让用户进行确认。用户确认之后，你就不要再重复获取车型号流程。
-    3.不满足步骤1和步骤2情况下，你要深度思考，对输入的文本进行识别，然后进行合理的切分。再对表{trim_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下: 
+        WHERE {trim_table_name}.id = '{{{{trim_id}}}}';
+    2.不满足步骤1的情况下，你要按照此流程生成SQL。你要对输入的文本进行合理的切分，在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字）：
         SELECT 
-            {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
-        FROM {trim_table_name}
-        WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR id like '{{{{key}}}}' 
+            {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
+            {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
+        FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
+                               JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
+        WHERE {trim_table_name}.cn_name like '{{{{key}}}}' 
+            OR {trim_table_name}.en_name like '{{{{key}}}}' 
+            OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
-        特别注意： a.要把变量key替换成你识别出来的关键字，避免'%'号重复；b.如果查询不到数据，一定不要自己瞎造数据给用户展示；c.如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的车型号id；
-    4.如果步骤1和步骤3都查询不到数据，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
-    
-确认城市id步骤如下：
-    1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
-        SELECT 
-            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
-        FROM {city_table_name} 
-        WHERE {city_table_name}.id = '{{{{city_id}}}}'
-    2.如果步骤1查询不到数据，你要深度思考，对输入的文本进行识别，然后进行合理的切分。再对表{city_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下：
-        SELECT 
-            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
-        FROM {city_table_name} 
-        WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}'
-        LIMIT 10;
-        特别注意： a.要把变量key替换成你识别出来的关键字，避免'%'号重复；b.如果查询不到数据，一定不要自己瞎造数据给用户展示；c.如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的城市id；
 
-确认信息格式如下，对于以下变量brand_name、brand_id、model_name、model_id、trim_name、trim_id、city_name、city_id你需要用上文查询结果填充以下内容
+获取城市信息SQL生成流程：
+    a.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并生成以下SQL获取信息:
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE {city_table_name}.id = '{{{{city_id}}}}';
+    b.不满足步骤a情况下，你要深度思考，然后进行合理的切分。在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字） ：
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10;
+
+你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+
+
+你生成SQL并将执行SQL查询，将数据返回给用户进行确认，用户确认没有问题之后，你再更新状态！不要跳过这一步！不能自己瞎编乱造！确认信息格式如下，你需要用上文查询结果填充以下变量：
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
     2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
     3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
     4. **城市**：{{{{city_name}}}}（{{{{city_id}}}}）
     5. **颜色**：目前默认都为：黑色（Col09）
     6. **行驶里程（万公里）**：用户告知的行驶里程；
-    不需要确认的信息可以不用显示出来。
 
-DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
+你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
 
-To start you should ALWAYS look at the tables in the database to see what you can query.
-Do NOT skip this step.
-Then you should query the schema of the most relevant tables.
-    """.format(
+当你拿到估值需要的所有信息之后，你仍要跟用户进行确认，不要跳过这一步。
+最后，用户确认数据没有问题之后，你再调用相关工具，不要跳过这一步，不要自行调用估值接口！
+""".format(
         brand_table_name=args["brand_table_name"],
         model_table_name=args["model_table_name"],
         trim_table_name=args["trim_table_name"],
         city_table_name=args["city_table_name"],
+        dialect=args.get("dialect", "MySQL"),
+        table_names=args.get("table_names", []),
     )
     return ChatPromptTemplate.from_messages(
         [
-            ("system", prompt_template),
+            ("system", msg),
             ("placeholder", "{messages}"),
         ]
     )
@@ -85,7 +92,7 @@ url = URL(
     port=3306,
     database=os.getenv("MYSQL_DB"),
     username=os.getenv("MYSQL_USR"),
-    password=os.getenv("MYSQL_PWD"),
+    password=base64.b64decode(os.getenv("MYSQL_PWD")).decode("utf-8"),
     query=util.immutabledict({
         "charset": "utf8mb4",
     })
@@ -106,6 +113,7 @@ params = {
     "model_table_name": "ref_old_model",
     "trim_table_name": "ref_old_basictrim",
     "city_table_name": "ref_old_city",
+    "table_names": "ref_old_brand,ref_old_model,ref_old_basictrim,ref_old_city"
 }
 
 toolkit = SQLDatabaseToolkit(db=db, llm=create_ai())
@@ -121,10 +129,12 @@ from langgraph.prebuilt import create_react_agent
 
 agent_executor = create_react_agent(create_ai(), tools, prompt=system_message)
 
-question = "查询奥迪 2021款 40 TFSI 进享人生版"
-
-for step in agent_executor.stream(
-        {"messages": [{"role": "user", "content": question}]},
-        stream_mode="values",
-):
-    step["messages"][-1].pretty_print()
+while True:
+    user_input = input("用户：")
+    if user_input == "exit":
+        break
+    for step in agent_executor.stream(
+            {"messages": [{"role": "user", "content": user_input}]},
+            stream_mode="values",
+    ):
+        step["messages"][-1].pretty_print()

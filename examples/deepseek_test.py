@@ -3,37 +3,21 @@
 from openai import OpenAI
 
 client = OpenAI(
-    base_url='https://api.deepseek.com'
+    # 请用知识引擎原子能力API Key将下行替换为：api_key="sk-xxx",
+    api_key="LKEAP_API_KEY", # 如何获取API Key：https://cloud.tencent.com/document/product/1772/115970
+    base_url="https://api.lkeap.cloud.tencent.com/v1",
 )
 
-response = client.chat.completions.create(
-    model="deepseek-chat",
+completion = client.chat.completions.create(
+    model="deepseek-r1",  # 此处以 deepseek-r1 为例，可按需更换模型名称。
     messages=[
-        {"role": "system", "content": "You are a helpful assistant"},
-        {"role": "user", "content": "Hello"},
-    ],
-    stream=False
+        {'role': 'user', 'content': '9.9和9.11谁大'}
+    ]
 )
 
-print(response.choices[0].message.content)
-
-
-
-
-# # 定义 ChatPromptTemplate
-# template = ChatPromptTemplate.from_messages([
-#     ("system", "You are a helpful AI bot. Your name is {name}."),
-#     ("human", "Hello, how are you doing?"),
-#     ("ai", "I'm doing well, thanks!"),
-#     ("human", "{user_input}"),
-# ])
-#
-# # 创建链式调用
-# chain = template | llm
-#
-# # 格式化输入
-# input_data = {"name": "Bob", "user_input": "给我讲一个埃及法老的笑话"}
-#
-# # 调用链并获取结果
-# result = chain.invoke(input_data)
-# print(result)
+# 通过reasoning_content字段打印思考过程
+print("思考过程：")
+print(completion.choices[0].message.reasoning_content)
+# 通过content字段打印最终答案
+print("最终答案：")
+print(completion.choices[0].message.content)

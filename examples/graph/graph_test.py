@@ -4,7 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from examples.factory.ai_factory import create_ai, create_ai
+from examples.factory.ai_factory import create_ai
 
 
 @tool

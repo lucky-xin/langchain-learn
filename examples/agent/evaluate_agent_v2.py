@@ -2,21 +2,23 @@ import base64
 import os
 import threading
 import uuid
-from typing import List, Annotated
+from typing import List, Annotated, Any
 
 import requests
 import streamlit as st
 from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit
 from langchain_community.tools import QuerySQLDatabaseTool
 from langchain_community.utilities import SQLDatabase, TextRequestsWrapper
-from langchain_core.messages import AIMessage, ToolMessage, HumanMessage, BaseMessage, AIMessageChunk, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, AIMessageChunk, SystemMessage
+from langchain_core.messages import ToolMessage
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
 from langchain_core.tools import BaseTool, BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import START
 from langgraph.graph import END, add_messages, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_react_agent, ToolNode
 from pydantic import BaseModel, Field
 from requests_auth import OAuth2ResourceOwnerPasswordCredentials
 from sqlalchemy import create_engine, URL, util
@@ -50,6 +52,7 @@ params = {
     "model_table_name": "ref_old_model",
     "trim_table_name": "ref_old_basictrim",
     "city_table_name": "ref_old_city",
+    "table_names": "ref_old_brand,ref_old_model,ref_old_basictrim,ref_old_city"
 }
 
 
@@ -74,49 +77,53 @@ def create_oauth2() -> OAuth2ResourceOwnerPasswordCredentials:
 @st.cache_resource(ttl="1d")
 def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     msg = """
-你是一名专业的二手车估值助手。
+你是一名专业的SQL语句编写助手，你需通过对用户输入的问题进行深度理解，并按照要求生成SQL。
+只能生成查询语句，不能生成任何delete，insert，update等编辑语句。
 
-你需获取以下参数（注意别名匹配）：
-- 车型号id (别名：trimId，trim_id或者trim id)
-- 城市id (别名：cityId，city_id或者city id)
-- 颜色id (别名：colorId，color_id或者color id)
+你需获取的估值参数如下（注意别名匹配）：
+- 品牌名称 (用户可能说的别名：brandName，brand_name或者brand name)
+- 品牌id (用户可能说的别名：brandId，brand_id或者brand id)
+- 车型名称 (用户可能说的别名：modelName，model_name或者model name)
+- 车型id (用户可能说的别名：modelId，model_id或者model id)
+- 车型号名称 (用户可能说的别名：trim_name)
+- 车型号id (用户可能说的别名：trimId，trim_id或者trim id)
+- 城市id (用户可能说的别名：cityId，city_id或者city id)
+- 颜色id (用户可能说的别名：colorId，color_id或者color id)
 - 行驶里程 
 - 车上牌时间（格式为yyyyMMdd）
 
-开始时，你应该始终查看{dialect}数据库中的表和字段信息，以了解可以查询的内容，不要跳过这一步，你要执行以下语句获取相关表的模式：
-SHOW CREATE TABLE `{brand_table_name}`;
-SHOW CREATE TABLE `{model_table_name}`;
-SHOW CREATE TABLE `{trim_table_name}`;
+开始时，你应该始终查看{dialect}数据库中表{table_names}的DDL信息，以了解可以查询的内容，不要跳过这一步，你要先执行以下语句获取相关表的模式：SHOW CREATE TABLE table_name。
 
-你需通过对用户输入的问题进行深度理解，并按照要求生成SQL，然后使用工具去数据库查询数据，以精准获取车辆参数，不要跳过这一步。
-    
-获取车型号信息和流程，不能跳过此流程：
-    1.一旦你能确认了trim_id，你就需要用trim_id的值填充以下trim_id变量，并执行以下SQL获取信息，不要跳过这一步:
+然后你要按照下文生成SQL。
+
+获取车型号信息SQL生成流程：
+    1.一旦用户跟你确认了trim_id，你就需要用trim_id的值填充以下变量，并生成如下SQL，不要跳过这一步:
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
         FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
-        WHERE {trim_table_name}.id = '{{{{trim_id}}}}'
-    2.一旦步骤1中查询到数据你就要进入信息确认流程，让用户进行确认。用户确认之后，你就不要再重复进入获取车型号信息流程。
-    3.不满足步骤1和步骤2情况下，你要生成查询SQL。此时你要深度思考，对输入的文本进行合理的切分，在完成文本切分之后，你再使用数据库工具对表{trim_table_name}进行模糊匹配，获取前10条记录。特别注意：如果通过工具成功获取数据，以列表展示给用户，让用户选择并确认具体的车型号id；生成查询条件例子如下（把变量key替换成你识别出来的关键字）: 
+        WHERE {trim_table_name}.id = '{{{{trim_id}}}}';
+    2.不满足步骤1的情况下，你要按照此流程生成SQL。你要对输入的文本进行合理的切分，在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字）：
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
         FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
-        WHERE {trim_table_name}.cn_name like '{{{{key}}}}' OR {trim_table_name}.en_name like '{{{{key}}}}' OR {trim_table_name}.id like '{{{{key}}}}' 
+        WHERE {trim_table_name}.cn_name like '{{{{key}}}}' 
+            OR {trim_table_name}.en_name like '{{{{key}}}}' 
+            OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
-        
-    4.如果步骤1和步骤3都查询不到数据，你就提示用户输入车型号相关信息，或者重新对用户输入文本进行切分，再进入步骤3，直到你能在数据库中获取正确的车型号为止；
 
-获取城市id要求和流程，不能跳过此流程：
-    1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
-        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE {city_table_name}.id = '{{{{city_id}}}}'
-    2.如果步骤1查询不到数据，你要深度思考，对输入的文本进行识别，然后进行合理的切分。你再使用数据库工具对表{city_table_name}进行模糊匹配，获取前10条记录，如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的城市id。生成查询条件例子如下：
-        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10
+获取城市信息SQL生成流程：
+    a.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并生成以下SQL获取信息:
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE {city_table_name}.id = '{{{{city_id}}}}';
+    b.不满足步骤a情况下，你要深度思考，然后进行合理的切分。在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字） ：
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10;
 
-在你跟用户用户确认没有问题之后，你再更新状态！不要跳过这一步！不能自己瞎编乱造！确认信息格式如下，你需要用上文查询结果填充以下变量：
+你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+
+你生成SQL并将执行SQL查询，将数据返回给用户进行确认，用户确认没有问题之后，你再更新状态！不要跳过这一步！不能自己瞎编乱造！确认信息格式如下，你需要用上文查询结果填充以下变量：
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
     2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
     3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
@@ -134,6 +141,7 @@ SHOW CREATE TABLE `{trim_table_name}`;
         trim_table_name=args["trim_table_name"],
         city_table_name=args["city_table_name"],
         dialect=args.get("dialect", "MySQL"),
+        table_names=args.get("table_names", []),
     )
     return ChatPromptTemplate.from_messages(
         [
@@ -162,7 +170,7 @@ def create_sql_tool() -> BaseTool:
     )
     db = SQLDatabase(
         engine=engine,
-        include_tables=list(params.values()),
+        include_tables=params.get("table_names", "").split(","),
         sample_rows_in_table_info=2  # 在提示词中展示的示例数据行数
     )
     return QuerySQLDatabaseTool(db=db)
@@ -380,6 +388,30 @@ components:
     return api_doc
 
 
+def handle_tool_error(state) -> dict:
+    error = state.get("error")
+    tool_calls = state["messages"][-1].tool_calls
+    return {
+        "messages": [
+            ToolMessage(
+                content=f"Error: {repr(error)}\n please fix your mistakes.",
+                tool_call_id=tc["id"],
+            )
+            for tc in tool_calls
+        ]
+    }
+
+
+def create_tool_node_with_fallback(tools: list) -> RunnableWithFallbacks[Any, dict]:
+    """
+    Create a ToolNode with a fallback to handle errors and surface them to the agent.
+    """
+    return ToolNode(tools).with_fallbacks(
+        fallbacks=[RunnableLambda(handle_tool_error)],
+        exception_key="error"
+    )
+
+
 def create_evaluate_tool() -> BaseToolkit:
     ALLOW_DANGEROUS_REQUEST = True
     return RequestsToolkit(
@@ -426,7 +458,7 @@ def get_user_info_chain(state: State):
     for e in state["messages"]:
         e.pretty_print()
 
-    resp = st.session_state.user_info_chain.invoke(state)
+    resp = st.session_state.user_info_agent.invoke(state)
     return {"messages": [resp]}
 
 
@@ -439,8 +471,6 @@ def sql_tool_chain(state: State):
                "args": tool_call.get("args", {})
                }
     )
-    print("sql_tool_chain")
-    res.pretty_print()
     return {
         "messages": [
             to_tool_message(sur=res, prefix="调用数据库工具获取信息如下：\n", tool_call_id=tool_call["id"])
@@ -472,61 +502,57 @@ def evaluate_chain(state: State):
     return {"messages": []}
 
 
-# Create graph builder
-if not st.session_state.get("graph"):
-    print("Creating graph...")
-    # 初始化 MemorySaver 共例
-    workflow = StateGraph(State)
-    workflow.add_node("info", get_user_info_chain)
-    workflow.add_node("sql_tool", sql_tool_chain)
-    workflow.add_node("evaluator", evaluate_chain)
-
-    workflow.add_conditional_edges(
-        source="info",
-        path=get_state,
-        path_map=[
-            "sql_tool",
-            "info",
-            "evaluator",
-            END]
-    )
-
-    workflow.add_edge(START, "info")
-    workflow.add_edge("sql_tool", "info")
-    workflow.add_edge("evaluator", END)
-
-    # checkpointer = create_checkpointer()
-    checkpointer = MemorySaver()
-    graph = workflow.compile(checkpointer=checkpointer)
-    st.session_state.graph = graph
-    st.session_state.run_id = str(uuid.uuid4())
-    st.session_state.image = st.session_state.graph.get_graph().draw_mermaid_png()
-
-st.image(
-    image=st.session_state.image,
-    caption="二手车估值助手流程",
-    use_container_width=False
-)
-
-
 def init():
     print("init...")
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
     if "sql_tool" not in st.session_state:
         st.session_state.sql_tool = create_sql_tool()
     if "llm" not in st.session_state:
         st.session_state.llm = create_ai()
-    if "llm_with_tool" not in st.session_state:
-        st.session_state.llm_with_tool = st.session_state.llm.bind_tools(
-            [PromptInstructions, st.session_state.sql_tool]
-        )
-    if "user_info_chain" not in st.session_state:
-        st.session_state.user_info_chain = create_prompt(params) | st.session_state.llm_with_tool
+    if "user_info_agent" not in st.session_state:
+        tools = [PromptInstructions, st.session_state.sql_tool]
+        st.session_state.user_info_agent = create_prompt(params) | st.session_state.llm.bind_tools(tools)
+        # st.session_state.user_info_agent = create_react_agent(st.session_state.llm, tools, prompt=create_prompt(params))
     if "evaluate_agent" not in st.session_state:
         st.session_state.evaluate_agent = create_evaluate_agent()
+    # Create graph builder
+    if not st.session_state.get("graph"):
+        print("Creating graph...")
+        # 初始化 MemorySaver 共例
+        workflow = StateGraph(State)
+        workflow.add_node("info", get_user_info_chain)
+        workflow.add_node("sql_tool", sql_tool_chain)
+        workflow.add_node("evaluator", evaluate_chain)
+
+        workflow.add_conditional_edges(
+            source="info",
+            path=get_state,
+            path_map=[
+                "sql_tool",
+                "info",
+                "evaluator",
+                END]
+        )
+
+        workflow.add_edge(START, "info")
+        workflow.add_edge("sql_tool", "info")
+        workflow.add_edge("evaluator", END)
+
+        # checkpointer = create_checkpointer()
+        checkpointer = MemorySaver()
+        graph = workflow.compile(checkpointer=checkpointer)
+        st.session_state.graph = graph
+        st.session_state.run_id = str(uuid.uuid4())
+        st.session_state.image = st.session_state.graph.get_graph().draw_mermaid_png()
+
+    st.image(
+        image=st.session_state.image,
+        caption="二手车估值助手流程",
+        use_container_width=False
+    )
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"]).write(msg["content"])
 
 
 def invoke(user_input: str):

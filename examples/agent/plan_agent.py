@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from examples.factory.ai_factory import create_ai
 
+
 class PlanExecute(TypedDict):
     input: str
     plan: List[str]
