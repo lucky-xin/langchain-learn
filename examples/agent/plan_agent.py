@@ -104,6 +104,8 @@ agent_executor = create_react_agent(
 async def main():
     async def plan_step(state: PlanExecute):
         plan = await planner.ainvoke({"messages": [("user", state["input"])]})
+        if not plan:
+            return {"plan": []}
         return {"plan": plan.steps}
 
     async def execute_step(state: PlanExecute):

@@ -1,3 +1,4 @@
+import base64
 import os
 import threading
 import uuid
@@ -73,33 +74,32 @@ def create_oauth2() -> OAuth2ResourceOwnerPasswordCredentials:
 @st.cache_resource(ttl="1d")
 def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     msg = """
-你是一名专业的二手车估值助手，需通过和数据库交互精准获取车辆参数，严格遵循以下流程：
-开始时，你应该始终查看{dialect}数据库中的表和字段信息，以了解可以查询的内容，不要跳过这一步。
+你是一名专业的二手车估值助手。
 
-然后，你应该执行以下语句获取相关表的模式。
-SHOW CREATE TABLE `{brand_table_name}`;
-SHOW CREATE TABLE `{model_table_name}`;
-SHOW CREATE TABLE `{trim_table_name}`;
-
-需获取以下参数（注意别名匹配）：
+你需获取以下参数（注意别名匹配）：
 - 车型号id (别名：trimId，trim_id或者trim id)
 - 城市id (别名：cityId，city_id或者city id)
 - 颜色id (别名：colorId，color_id或者color id)
 - 行驶里程 
 - 车上牌时间（格式为yyyyMMdd）
-    
-你的后续工作如下：
 
-获取车型号信息流程：
+开始时，你应该始终查看{dialect}数据库中的表和字段信息，以了解可以查询的内容，不要跳过这一步，你要执行以下语句获取相关表的模式：
+SHOW CREATE TABLE `{brand_table_name}`;
+SHOW CREATE TABLE `{model_table_name}`;
+SHOW CREATE TABLE `{trim_table_name}`;
+
+你需通过对用户输入的问题进行深度理解，并按照要求生成SQL，然后使用工具去数据库查询数据，以精准获取车辆参数，不要跳过这一步。
+    
+获取车型号信息和流程，不能跳过此流程：
     1.一旦你能确认了trim_id，你就需要用trim_id的值填充以下trim_id变量，并执行以下SQL获取信息，不要跳过这一步:
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
         FROM {trim_table_name} JOIN {model_table_name} ON {model_table_name}.id = {trim_table_name}.model_id 
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
-        WHERE {trim_table_name}.id = {{{{trim_id}}}}
+        WHERE {trim_table_name}.id = '{{{{trim_id}}}}'
     2.一旦步骤1中查询到数据你就要进入信息确认流程，让用户进行确认。用户确认之后，你就不要再重复进入获取车型号信息流程。
-    3.不满足步骤1和步骤2情况下，你要深度思考，对输入的文本进行识别，并进行合理的切分，再对表{trim_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下: 
+    3.不满足步骤1和步骤2情况下，你要生成查询SQL。此时你要深度思考，对输入的文本进行合理的切分，在完成文本切分之后，你再使用数据库工具对表{trim_table_name}进行模糊匹配，获取前10条记录。特别注意：如果通过工具成功获取数据，以列表展示给用户，让用户选择并确认具体的车型号id；生成查询条件例子如下（把变量key替换成你识别出来的关键字）: 
         SELECT 
             {brand_table_name}.id brand_id, {brand_table_name}.cn_name brand_name, {model_table_name}.cn_name model_name,
             {model_table_name}.id model_id, {trim_table_name}.cn_name trim_name, {trim_table_name}.id trim_id 
@@ -108,38 +108,26 @@ SHOW CREATE TABLE `{trim_table_name}`;
         WHERE {trim_table_name}.cn_name like '{{{{key}}}}' OR {trim_table_name}.en_name like '{{{{key}}}}' OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
         
-        特别注意： 要把变量key替换成你识别出来的关键字；如果查询不到数据，一定不要自己瞎造数据给用户展示；如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的车型号id；
-    4.如果步骤1和步骤3都查询不到数据，你就提示用户输入车型号相关信息，直到你能在数据库中获取正确的车型号为止；
+    4.如果步骤1和步骤3都查询不到数据，你就提示用户输入车型号相关信息，或者重新对用户输入文本进行切分，再进入步骤3，直到你能在数据库中获取正确的车型号为止；
 
-
-获取城市id流程：
+获取城市id要求和流程，不能跳过此流程：
     1.如果用户告诉你城市id,你就需要用city_id填充以下city_id变量，并执行以下SQL获取信息:
-        SELECT 
-            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
-        FROM {city_table_name} 
-        WHERE {city_table_name}.id = '{{{{city_id}}}}'
-    2.如果步骤1查询不到数据，你要深度思考，对输入的文本进行识别，然后进行合理的切分。再对表{city_table_name}进行模糊匹配，获取前10条记录。生成查询条件例子如下：
-        SELECT 
-            {city_table_name}.id city_id, {city_table_name}.cn_name city_name
-        FROM {city_table_name} 
-        WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}'
-        LIMIT 10;
-        
-        特别注意： 要把变量key替换成你识别出来的关键字；如果查询不到数据，一定不要自己瞎造数据给用户展示；如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的城市id；
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE {city_table_name}.id = '{{{{city_id}}}}'
+    2.如果步骤1查询不到数据，你要深度思考，对输入的文本进行识别，然后进行合理的切分。你再使用数据库工具对表{city_table_name}进行模糊匹配，获取前10条记录，如果通过工具获取成功获取数据，以列表展示给用户，让用户选择并确认具体的城市id。生成查询条件例子如下：
+        SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10
 
-信息确认流程：
-确认信息格式如下，对于以下变量brand_name、brand_id、model_name、model_id、trim_name、trim_id、city_name、city_id你需要用上文查询结果填充以下内容
+在你跟用户用户确认没有问题之后，你再更新状态！不要跳过这一步！不能自己瞎编乱造！确认信息格式如下，你需要用上文查询结果填充以下变量：
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
     2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
     3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
     4. **城市**：{{{{city_name}}}}（{{{{city_id}}}}）
     5. **颜色**：目前默认都为：黑色（Col09）
     6. **行驶里程（万公里）**：用户告知的行驶里程；
-    不需要确认的信息可以不用显示出来。
 
 你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
-当你能够辨别所有信息，要跟用户进行确认，不要跳过这一步。
-最后，用户确认数据没有问题之后，并调用相关工具。
+
+当你拿到估值需要的所有信息之后，你仍要跟用户进行确认，不要跳过这一步。
+最后，用户确认数据没有问题之后，你再调用相关工具，不要跳过这一步，不要自行调用估值接口！
 """.format(
         brand_table_name=args["brand_table_name"],
         model_table_name=args["model_table_name"],
@@ -162,7 +150,7 @@ def create_sql_tool() -> BaseTool:
         port=3306,
         database=os.getenv("MYSQL_DB"),
         username=os.getenv("MYSQL_USR"),
-        password="",
+        password=base64.b64decode(os.getenv("MYSQL_PWD")).decode("utf-8"),
         query=util.immutabledict({
             "charset": "utf8mb4",
         })
@@ -434,7 +422,7 @@ def get_state(state: State) -> str:
 
 
 def get_user_info_chain(state: State):
-    print("-------------------------------")
+    print("get_user_info_chain-------------------------------")
     for e in state["messages"]:
         e.pretty_print()
 
@@ -451,6 +439,8 @@ def sql_tool_chain(state: State):
                "args": tool_call.get("args", {})
                }
     )
+    print("sql_tool_chain")
+    res.pretty_print()
     return {
         "messages": [
             to_tool_message(sur=res, prefix="调用数据库工具获取信息如下：\n", tool_call_id=tool_call["id"])
@@ -510,9 +500,10 @@ if not st.session_state.get("graph"):
     graph = workflow.compile(checkpointer=checkpointer)
     st.session_state.graph = graph
     st.session_state.run_id = str(uuid.uuid4())
+    st.session_state.image = st.session_state.graph.get_graph().draw_mermaid_png()
 
 st.image(
-    image=st.session_state.graph.get_graph().draw_mermaid_png(),
+    image=st.session_state.image,
     caption="二手车估值助手流程",
     use_container_width=False
 )
