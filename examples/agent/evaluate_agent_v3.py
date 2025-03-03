@@ -40,10 +40,10 @@ class PromptInstructions(BaseModel):
     model_name: str = Field(description="车型名称")
     model_id: str = Field(description="车型id")
     trim_name: str = Field(description="车型号名称")
-    trim_id: str = Field(description="车型号id")
-    city_id: str = Field(description="城市id")
-    color_id: str = Field(default="Col09", description="颜色id")
-    mileage: float = Field(description="行驶里程，单位为万公里，必须大于0，如：2.4，表示2.4万公里")
+    trim_id: str = Field(description="车型号id", pattern="^tri(\d+)$")
+    city_id: str = Field(description="城市id", pattern="^cit(\d+)$")
+    color_id: str = Field(default="Col09", description="颜色id", pattern="^Col(\d+)$")
+    mileage: float = Field(description="行驶里程，单位为万公里，必须大于0，如：2.4，表示2.4万公里,最大值50")
     reg_time: str = Field(description="车上牌时间，格式为yyyyMMdd,如：20210401")
 
 
@@ -78,6 +78,8 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     msg = """
 你是一名专业的SQL语句编写助手，你需通过对用户输入的问题进行深度理解，并按照要求生成SQL。
 只能生成查询语句，不能生成任何delete，insert，update等编辑语句。
+你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！不要自己瞎造数据！
+当你拿到需要的所有信息并和用户确认之后，你再调用PromptInstructions工具！
 
 你需获取的估值参数如下（注意别名匹配）：
 - 品牌名称 (用户可能说的别名：brandName，brand_name或者brand name)
@@ -111,10 +113,13 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
                                JOIN {brand_table_name} ON {model_table_name}.brand_id = {brand_table_name}.id
         WHERE {trim_table_name}.cn_name like '{{{{key}}}}' 
             OR {trim_table_name}.en_name like '{{{{key}}}}' 
+            OR {trim_table_name}.abbr_cn_name like '{{{{key}}}}' 
+            OR {trim_table_name}.abbr_en_name like '{{{{key}}}}' 
             OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
         
-        你要以markdown格式把车型号列表展示给用户。你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id变量，例子如下：
+    你要以markdown格式把车型号列表展示给用户。你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id变量，例子如下：
+    
         | 品牌名称    |  品牌ID     | 车型名称     |   车型ID  |  车型号名称 | 车型号ID   |
         |------------|------------|-------------|----------|------------|----------|
         | brand_name | brand_id   | model_name  | model_id | trim_name  | trim_id  |
@@ -126,7 +131,8 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     b.不满足步骤a情况下，你要深度思考，然后进行合理的切分。在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字） ：
         SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10;
 
-你生成SQL并将执行SQL查询，将数据返回给用户进行确认，不要跳过这一步！不能自己瞎编乱造数据给用户！你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id，city_name，city_id变量，并按照以下例子进行展示：
+估值前的数据确认要求：你生成SQL并将执行SQL查询，将数据返回给用户进行确认，不要跳过这一步！不能自己瞎编乱造数据给用户！
+你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id，city_name，city_id变量，并按照以下例子进行展示：
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
     2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
     3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
@@ -134,8 +140,6 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     5. **颜色**：目前默认都为：黑色（Col09）
     6. **行驶里程（万公里）**：用户告知的行驶里程；
     
-你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！不要自己瞎造数据！
-当你拿到需要的所有信息并和用户确认之后，你再调用PromptInstructions工具！
 """.format(
         brand_table_name=args["brand_table_name"],
         model_table_name=args["model_table_name"],

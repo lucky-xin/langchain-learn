@@ -11,9 +11,9 @@ from urllib3.exceptions import ConnectionError
 class CarEvaluateInput(BaseModel):
     """Input for the CarEvaluateTool tool."""
 
-    trim_id: str = Field(description="车型号id")
-    city_id: str = Field(description="城市id")
-    color_id: str = Field(default="Col09", description="颜色id")
+    trim_id: str = Field(description="车型号id", pattern="^tri(\d+)$")
+    city_id: str = Field(description="城市id", pattern="^cit(\d+)$")
+    color_id: str = Field(default="Col09", description="颜色id", pattern="^Col(\d+)$")
     mileage: float = Field(description="行驶里程，单位为万公里，必须大于0，如：2.4，表示2.4万公里")
     reg_time: str = Field(description="车上牌时间，格式为yyyyMMdd,如：20210401")
 
