@@ -5,10 +5,11 @@ import uuid
 from typing import List, Annotated, Any
 
 import requests
+import streamlit as st
 from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit
 from langchain_community.tools import QuerySQLDatabaseTool, InfoSQLDatabaseTool
 from langchain_community.utilities import SQLDatabase, TextRequestsWrapper
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, AIMessageChunk, SystemMessage
 from langchain_core.messages import ToolMessage
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
@@ -16,13 +17,13 @@ from langchain_core.tools import BaseTool, BaseToolkit
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import START
 from langgraph.graph import END, add_messages, StateGraph
-from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent, ToolNode
 from pydantic import BaseModel, Field
 from requests_auth import OAuth2ResourceOwnerPasswordCredentials
 from sqlalchemy import create_engine, URL, util
 from typing_extensions import TypedDict
 
+from examples.agent.streamlit_callback_utils import get_streamlit_cb
 from examples.agent.tools.car_evaluator import CarEvaluateTool
 from examples.factory.ai_factory import create_ai
 
@@ -112,6 +113,7 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
             OR {trim_table_name}.en_name like '{{{{key}}}}' 
             OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
+        
         你要以markdown格式把车型号列表展示给用户。你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id变量，例子如下：
         | 品牌名称    |  品牌ID     | 车型名称     |   车型ID  |  车型号名称 | 车型号ID   |
         |------------|------------|-------------|----------|------------|----------|
@@ -124,7 +126,7 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     b.不满足步骤a情况下，你要深度思考，然后进行合理的切分。在完成文本切分之后，你再生成如下SQL（把变量key替换成你识别出来的关键字） ：
         SELECT {city_table_name}.id city_id, {city_table_name}.cn_name city_name FROM {city_table_name} WHERE cn_name like '{{{{key}}}}' OR en_name like '{{{{key}}}}' OR abbr_cn_name like '{{{{key}}}}' LIMIT 10;
 
-你生成SQL并将执行SQL查询，将数据返回给用户进行确认，不要跳过这一步！不能自己瞎编乱造！确认信息格式如下，你需要用上文查询结果填充brand_name，brand_id，model_name，model_id，trim_name，trim_id，city_name，city_id变量：
+你生成SQL并将执行SQL查询，将数据返回给用户进行确认，不要跳过这一步！不能自己瞎编乱造数据给用户！你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id，city_name，city_id变量，并按照以下例子进行展示：
     1. **品牌**：{{{{brand_name}}}}（{{{{brand_id}}}}）
     2. **车型**：{{{{model_name}}}}（{{{{model_id}}}}）
     3. **车型号**：{{{{trim_name}}}}（{{{{trim_id}}}}）
@@ -132,7 +134,7 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
     5. **颜色**：目前默认都为：黑色（Col09）
     6. **行驶里程（万公里）**：用户告知的行驶里程；
     
-你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！
+你要严格按照步骤执行，不要跳过任何步骤。如果你无法辨别这些信息，请他们澄清！不要试图疯狂猜测！不要自己瞎造数据！
 当你拿到需要的所有信息并和用户确认之后，你再调用PromptInstructions工具！
 """.format(
         brand_table_name=args["brand_table_name"],
@@ -178,7 +180,7 @@ def create_sql_tools() -> [BaseTool]:
     ]
 
 
-# TODO 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
+# 定义一个函数，用于获取生成提示模板所荒的消息，只获取工具调用之后的消息
 def create_tool_call_messages(prompt_system: str, state: State):
     reqs = {}
     other_msgs = []
@@ -203,77 +205,75 @@ def check_message_has_tool(state: State):
     return last_message
 
 
-def create_api_spec():
+def create_vim_match_api_spec():
     api_doc = """
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: 二手车估值接口
-  description: 二手车估值（新）接口文档
+  title: VIN 匹配 API
+  description: 根据VIN码查询车辆信息的接口
   version: 1.0.0
   contact:
     name: chaoxin.lu
-    email: chaoxin.lu@pistonint.com
 
 servers:
   - url: https://openapi.pistonint.com
     description: 生产环境
 
 paths:
-  /evaluate:
-    post:
+  /vin/match:
+    get:
       tags:
-        - 估值服务
-      summary: 二手车估值（新）
-      description: 获取二手车估值信息
-      operationId: usedCarValuation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ValuationRequest'
-            example:
-              datas:
-                - trimId: "tri26673"
-                  mileage: 2.26
-                  cityId: "cit00810"
-                  regTime: "20220101"
-                  colorId: "Col01"
+        - VIN
+      summary: VIN 匹配
+      description: 根据VIN码查询车辆信息
+      operationId: vinMatch
+      parameters:
+        - name: id
+          in: query
+          description: vin码
+          required: true
+          schema:
+            type: string
+          example: LSGUD84X5GE013971
+        - name: Authorization
+          in: header
+          description: OAuth2 认证令牌
+          required: true
+          schema:
+            type: string
+          example: OAuth2 xxx
       responses:
         '200':
           description: 成功响应
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ValuationResponse'
-              example:
-                code: 0
-                msg: "success"
-                data:
-                  - msrp: 231900
-                    checker:
-                      checkLevel: "normal"
-                      checkMsg: "配置缺失正常|品牌检查正常。|Model检查正常。|OEM检查正常。||正常|增量线性模型预测正常。|价差调用成功"
-                      status: 1
-                    nprice: 0.0
-                    sell:
-                      valueA: 153600
-                      valueB: 142800
-                      valueC: 132800
-                      valuePctA: 0.66
-                      valuePctB: 0.62
-                      valuePctC: 0.57
-                    buy:
-                      valueA: 153600
-                      valueB: 142800
-                      valueC: 132800
-                      valuePctA: 0.66
-                      valuePctB: 0.62
-                      valuePctC: 0.57
-                reqId: "req_123456"
-                took: 42
-      security:
-        - OAuth2: []
+                type: object
+                required:
+                  - code
+                  - msg
+                  - data
+                  - reqId
+                  - took
+                properties:
+                  code:
+                    type: integer
+                    format: int64
+                    example: 1
+                  msg:
+                    type: string
+                    example: Success.
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleInfo'
+                  reqId:
+                    type: string
+                    example: 77f639819d86a99032107c2ba7b98f7d
+                  took:
+                    type: integer
+                    format: int64
+                    example: 483
 
 components:
   schemas:
@@ -310,75 +310,110 @@ components:
                 type: string
                 description: 颜色ID
                 nullable: true
-
-    ValuationResponse:
+    VehicleInfo:
       type: object
+      required:
+        - id
+        - cnName
+        - enName
+        - abbrEnName
+        - abbrCnName
+        - valid
+        - year
+        - msrp
+        - onSaleFlag
+        - isClassic
+        - stopTime
+        - startTime
+        - bodyTypeId
+        - modelId
+        - generation
+        - oemId
+        - brandId
+        - oemName
+        - brandName
+        - modelName
+        - bodyType
+        - segmentType
+        - delFlag
+        - name
+        - abbrName
       properties:
-        code:
-          type: integer
-          format: int32
-        msg:
+        id:
           type: string
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/ValuationData'
-        reqId:
+          example: tri04003
+        cnName:
           type: string
-        took:
+          example: 上汽通用 别克GL8 2014款 2.4L 经典型
+        enName:
+          type: string
+          example: SAIC-GM Buick GL8 2014 2.4L Classic
+        abbrEnName:
+          type: string
+          example: 2014 2.4L Classic
+        abbrCnName:
+          type: string
+          example: 2014款 2.4L 经典型
+        valid:
+          type: boolean
+          example: true
+        year:
           type: integer
-          format: int64
-
-    ValuationData:
-      type: object
-      properties:
+          example: 2014
         msrp:
-          type: number
-          format: double
-        checker:
-          $ref: '#/components/schemas/CheckResult'
-        nprice:
-          type: number
-          format: double
-        sell:
-          $ref: '#/components/schemas/PriceInfo'
-        buy:
-          $ref: '#/components/schemas/PriceInfo'
-
-    CheckResult:
-      type: object
-      properties:
-        checkLevel:
-          type: string
-          enum: [CRITICAL, ERROR, WARNING, NORMAL, NONE]
-        checkMsg:
-          type: string
-        status:
           type: integer
-          format: int32
-
-    PriceInfo:
-      type: object
-      properties:
-        valueA:
-          type: number
-          format: double
-        valueB:
-          type: number
-          format: double
-        valueC:
-          type: number
-          format: double
-        valuePctA:
-          type: number
-          format: double
-        valuePctB:
-          type: number
-          format: double
-        valuePctC:
-          type: number
-          format: double
-
+          example: 209000
+        onSaleFlag:
+          type: boolean
+          example: false
+        isClassic:
+          type: boolean
+          example: false
+        stopTime:
+          type: string
+          example: 20151001
+        startTime:
+          type: string
+          example: 20131201
+        bodyTypeId:
+          type: string
+          example: bod00050
+        modelId:
+          type: string
+          example: mod02470
+        generation:
+          type: string
+          example: Model_Year
+        oemId:
+          type: string
+          example: oem01320
+        brandId:
+          type: string
+          example: bra00220
+        oemName:
+          type: string
+          example: 上汽通用
+        brandName:
+          type: string
+          example: 别克
+        modelName:
+          type: string
+          example: 别克GL8
+        bodyType:
+          type: string
+          example: MPV
+        segmentType:
+          type: string
+          example: AutoHome
+        delFlag:
+          type: integer
+          example: 0
+        name:
+          type: string
+          example: 上汽通用 别克GL8 2014款 2.4L 经典型
+        abbrName:
+          type: string
+          example: 2014款 2.4L 经典型
   securitySchemes:
     OAuth2:
       type: http
@@ -413,7 +448,7 @@ def create_tool_node_with_fallback(tools: list) -> RunnableWithFallbacks[Any, di
     )
 
 
-def create_evaluate_tool() -> BaseToolkit:
+def create_requests_toolkit() -> BaseToolkit:
     ALLOW_DANGEROUS_REQUEST = True
     return RequestsToolkit(
         requests_wrapper=TextRequestsWrapper(
@@ -433,86 +468,88 @@ def to_tool_message(sur: BaseMessage, prefix: str, tool_call_id: str):
 
 
 def get_ai_message_tool_name(msg: BaseMessage) -> str:
-    if not isinstance(msg, AIMessage) or not msg.tool_calls:
-        return ""
-    return msg.tool_calls[0].get("name", "")
-
-
-# 定义一个函数，用于获取当前状态
-def get_state(state: State) -> str:
-    messages = state.get("messages", [])
-    size = len(messages)
-    if size > 1:
-        last_message = messages[-2]
-        if isinstance(last_message, ToolMessage) and last_message.name == "PromptInstructions":
-            return "info"
-    last_message = messages[-1]
-    if isinstance(last_message, AIMessage) or not isinstance(last_message, HumanMessage):
-        return END
-    return "info"
-
-
-def create_evaluate_agent() -> CompiledGraph:
-    system_message = """
-You have access to an API to help answer user queries.
-Here is documentation on the API:
-{api_spec}
-""".format(api_spec=create_api_spec())
-    return create_react_agent(llm, create_evaluate_tool().get_tools(), prompt=system_message)
+    return msg.tool_calls[0].get("name", "") if not isinstance(msg, AIMessage) or not msg.tool_calls else ""
 
 
 def get_user_info_chain(state: State):
-    resp = user_info_agent.invoke(state)
+    resp = st.session_state.user_info_agent.invoke(state)
     return resp
 
 
-def evaluate_chain(state: State):
-    # 将消息处理链定义为 get_evaluate_messages 函数和 LLM 实例
-    prompt_system = """
-基于以下信息，完成估值接口调用，获取车型估值信息；
+def init():
+    print("init...")
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": """
+        您好！我是一名专业估值助手，为了获取车辆估值数据，你需要请输入以下参数，如果您不确定是哪一个车型号，我们就一切来确定。
+        - 车型号名称
+        - 城市
+        - 颜色
+        - 行驶里程
+        - 车上牌时间（年月日）
+        """}
+        ]
+    if "llm" not in st.session_state:
+        st.session_state.llm = create_ai()
+    if "user_info_agent" not in st.session_state:
+        car_evaluate_tool = CarEvaluateTool(auth=create_oauth2())
+        tools = [PromptInstructions, car_evaluate_tool] + create_sql_tools()
+        st.session_state.user_info_agent = create_react_agent(st.session_state.llm, tools, prompt=create_prompt(params))
+    # Create graph builder
+    if not st.session_state.get("graph"):
+        print("Creating graph...")
+        # 初始化 MemorySaver 共例
+        workflow = StateGraph(State)
+        workflow.add_node("info", get_user_info_chain)
+        workflow.add_edge(START, "info")
+        workflow.add_edge("info", END)
 
-{reqs}
-"""
-    messages = create_tool_call_messages(prompt_system, state)
-    return evaluate_agent.invoke({"messages": messages})
+        # checkpointer = create_checkpointer()
+        checkpointer = MemorySaver()
+        graph = workflow.compile(checkpointer=checkpointer)
+        st.session_state.graph = graph
+        st.session_state.run_id = str(uuid.uuid4())
+        st.session_state.image = st.session_state.graph.get_graph().draw_mermaid_png()
 
-llm = create_ai()
-car_evaluate_tool = CarEvaluateTool(auth=create_oauth2())
-tools = [PromptInstructions, car_evaluate_tool] + create_sql_tools()
-user_info_agent = create_react_agent(llm, tools, prompt=create_prompt(params))
-evaluate_agent = create_evaluate_agent()
-print("Creating graph...")
-# 初始化 MemorySaver 共例
-workflow = StateGraph(State)
-workflow.add_node("info", get_user_info_chain)
-# workflow.add_node("evaluator", evaluate_chain)
+    st.image(
+        image=st.session_state.image,
+        caption="二手车估值助手流程",
+        use_container_width=False
+    )
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"]).write(msg["content"])
 
-workflow.add_edge(START, "info")
-workflow.add_edge("info", END)
 
-# checkpointer = create_checkpointer()
-checkpointer = MemorySaver()
-graph = workflow.compile(checkpointer=checkpointer)
-run_id = str(uuid.uuid4())
+def invoke(user_input: str):
+    st.chat_message("user").markdown(user_input)
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    collected_messages = ""
+    with st.chat_message("assistant"):
+        st_cb = get_streamlit_cb(st.container())
+        config = {
+            "recursion_limit": 50,
+            "configurable": {
+                "run_id": st.session_state.run_id,
+                "thread_id": str(threading.current_thread().ident)
+            },
+            "callbacks": [st_cb]
+        }
+        output_placeholder = st.empty()
+        for chunks in st.session_state.graph.stream(
+                input={"messages": [HumanMessage(content=user_input)]},
+                config=config,
+                stream_mode="messages"
+        ):
+            for chunk in chunks:
+                if isinstance(chunk, AIMessageChunk) and chunk.content:
+                    collected_messages += chunk.content
+                    output_placeholder.markdown(collected_messages + "▌")
+            output_placeholder.markdown(collected_messages)
+        st.session_state.messages.append({"role": "assistant", "content": collected_messages})
 
-config = {
-    "recursion_limit": 50,
-    "configurable": {
-        "run_id": run_id,
-        "thread_id": str(threading.current_thread().ident)
-    },
-    # "callbacks": [st_cb]
-}
 
-while True:
-    user_input = input("请输入需求信息")
-    for chunks in graph.stream(
-            input={"messages": [HumanMessage(content=user_input)]},
-            config=config,
-            stream_mode="values"
-    ):
-        messages = chunks["messages"]
-        for message in messages:
-
-            if isinstance(message, AIMessage):
-                message.pretty_print()
+init()
+if q := st.chat_input("请输入需求信息"):
+    invoke(q)

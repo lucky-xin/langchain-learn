@@ -17,9 +17,8 @@ def create_ai() -> ChatOpenAI:
 #     return ChatOpenAI(
 #         api_key=os.getenv("HUNYUAN_API_KEY"),
 #         base_url="https://api.lkeap.cloud.tencent.com/v1",
-#         model="deepseek-v3",
+#         model="deepseek-r1",
 #         temperature=0.0
-#
 #     )
 
 

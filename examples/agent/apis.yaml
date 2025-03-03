@@ -1,0 +1,333 @@
+openapi: 3.0.3
+info:
+  title: VIN 匹配 API
+  description: 根据VIN码查询车辆信息的接口
+  version: 1.0.0
+  contact:
+    name: chaoxin.lu
+
+servers:
+  - url: https://openapi.pistonint.com
+    description: 生产环境
+
+paths:
+  /evaluate:
+    post:
+      tags:
+        - 估值服务
+      summary: 二手车估值（新）
+      description: 获取二手车估值信息
+      operationId: usedCarValuation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValuationRequest'
+            example:
+              datas:
+                - trimId: "tri26673"
+                  mileage: 2.26
+                  cityId: "cit00810"
+                  regTime: "20220101"
+                  colorId: "Col01"
+      responses:
+        '200':
+          description: 成功响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValuationResponse'
+              example:
+                code: 0
+                msg: "success"
+                data:
+                  - msrp: 231900
+                    checker:
+                      checkLevel: "normal"
+                      checkMsg: "配置缺失正常|品牌检查正常。|Model检查正常。|OEM检查正常。||正常|增量线性模型预测正常。|价差调用成功"
+                      status: 1
+                    nprice: 0.0
+                    sell:
+                      valueA: 153600
+                      valueB: 142800
+                      valueC: 132800
+                      valuePctA: 0.66
+                      valuePctB: 0.62
+                      valuePctC: 0.57
+                    buy:
+                      valueA: 153600
+                      valueB: 142800
+                      valueC: 132800
+                      valuePctA: 0.66
+                      valuePctB: 0.62
+                      valuePctC: 0.57
+                reqId: "req_123456"
+                took: 42
+      security:
+        - OAuth2: [ ]
+
+  /vin/match:
+    get:
+      tags:
+        - VIN
+      summary: VIN 匹配
+      description: 根据VIN码查询车辆信息
+      operationId: vinMatch
+      parameters:
+        - name: id
+          in: query
+          description: vin码
+          required: true
+          schema:
+            type: string
+          example: LSGUD84X5GE013971
+        - name: Authorization
+          in: header
+          description: OAuth2 认证令牌
+          required: true
+          schema:
+            type: string
+          example: OAuth2 xxx
+      responses:
+        '200':
+          description: 成功响应
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - msg
+                  - data
+                  - reqId
+                  - took
+                properties:
+                  code:
+                    type: integer
+                    format: int64
+                    example: 1
+                  msg:
+                    type: string
+                    example: Success.
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleInfo'
+                  reqId:
+                    type: string
+                    example: 77f639819d86a99032107c2ba7b98f7d
+                  took:
+                    type: integer
+                    format: int64
+                    example: 483
+
+components:
+  schemas:
+    ValuationRequest:
+      type: object
+      properties:
+        datas:
+          type: array
+          description: 估值数据
+          maxItems: 500
+          items:
+            type: object
+            required:
+              - trimId
+              - mileage
+              - cityId
+              - regTime
+            properties:
+              trimId:
+                type: string
+                description: 型号ID
+              mileage:
+                type: number
+                format: double
+                description: 里程（单位：万公里）
+              cityId:
+                type: string
+                description: 城市ID
+              regTime:
+                type: string
+                pattern: '^\d{8}$'
+                description: 上牌时间(yyyyMMdd)
+              colorId:
+                type: string
+                description: 颜色ID
+                nullable: true
+    ValuationResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        msg:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValuationData'
+        reqId:
+          type: string
+        took:
+          type: integer
+          format: int64
+    ValuationData:
+      type: object
+      properties:
+        msrp:
+          type: number
+          format: double
+        checker:
+          $ref: '#/components/schemas/CheckResult'
+        nprice:
+          type: number
+          format: double
+        sell:
+          $ref: '#/components/schemas/PriceInfo'
+        buy:
+          $ref: '#/components/schemas/PriceInfo'
+    CheckResult:
+      type: object
+      properties:
+        checkLevel:
+          type: string
+          enum: [ CRITICAL, ERROR, WARNING, NORMAL, NONE ]
+        checkMsg:
+          type: string
+        status:
+          type: integer
+          format: int32
+    PriceInfo:
+      type: object
+      properties:
+        valueA:
+          type: number
+          format: double
+        valueB:
+          type: number
+          format: double
+        valueC:
+          type: number
+          format: double
+        valuePctA:
+          type: number
+          format: double
+        valuePctB:
+          type: number
+          format: double
+        valuePctC:
+          type: number
+          format: double
+    VehicleInfo:
+      type: object
+      required:
+        - id
+        - cnName
+        - enName
+        - abbrEnName
+        - abbrCnName
+        - valid
+        - year
+        - msrp
+        - onSaleFlag
+        - isClassic
+        - stopTime
+        - startTime
+        - bodyTypeId
+        - modelId
+        - generation
+        - oemId
+        - brandId
+        - oemName
+        - brandName
+        - modelName
+        - bodyType
+        - segmentType
+        - delFlag
+        - name
+        - abbrName
+      properties:
+        id:
+          type: string
+          example: tri04003
+        cnName:
+          type: string
+          example: 上汽通用 别克GL8 2014款 2.4L 经典型
+        enName:
+          type: string
+          example: SAIC-GM Buick GL8 2014 2.4L Classic
+        abbrEnName:
+          type: string
+          example: 2014 2.4L Classic
+        abbrCnName:
+          type: string
+          example: 2014款 2.4L 经典型
+        valid:
+          type: boolean
+          example: true
+        year:
+          type: integer
+          example: 2014
+        msrp:
+          type: integer
+          example: 209000
+        onSaleFlag:
+          type: boolean
+          example: false
+        isClassic:
+          type: boolean
+          example: false
+        stopTime:
+          type: string
+          example: 20151001
+        startTime:
+          type: string
+          example: 20131201
+        bodyTypeId:
+          type: string
+          example: bod00050
+        modelId:
+          type: string
+          example: mod02470
+        generation:
+          type: string
+          example: Model_Year
+        oemId:
+          type: string
+          example: oem01320
+        brandId:
+          type: string
+          example: bra00220
+        oemName:
+          type: string
+          example: 上汽通用
+        brandName:
+          type: string
+          example: 别克
+        modelName:
+          type: string
+          example: 别克GL8
+        bodyType:
+          type: string
+          example: MPV
+        segmentType:
+          type: string
+          example: AutoHome
+        delFlag:
+          type: integer
+          example: 0
+        name:
+          type: string
+          example: 上汽通用 别克GL8 2014款 2.4L 经典型
+        abbrName:
+          type: string
+          example: 2014款 2.4L 经典型
+  securitySchemes:
+    OAuth2:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth2认证
