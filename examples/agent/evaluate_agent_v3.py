@@ -118,7 +118,7 @@ def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
             OR {trim_table_name}.id like '{{{{key}}}}' 
         LIMIT 10;
         
-    你要以markdown格式把车型号列表展示给用户。你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id变量，例子如下：
+    你要以markdown格式把车型号列表展示给用户，让用户进行选择。你需要用上文查询结果填充以下brand_name，brand_id，model_name，model_id，trim_name，trim_id变量，例子如下：
     
         | 品牌名称    |  品牌ID     | 车型名称     |   车型ID  |  车型号名称 | 车型号ID   |
         |------------|------------|-------------|----------|------------|----------|
