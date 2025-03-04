@@ -1,34 +1,38 @@
 import streamlit as st
 import streamlit_authenticator as stauth
+import yaml
+from yaml import SafeLoader
 
-# 用户配置（建议存储到数据库或加密文件）
-credentials = {
-    "usernames": {
-        "admin": {
-            "name": "Admin",
-            "password": stauth.Hasher(["admin123"]).generate()[0]  # 自动哈希密码
-        },
-        "user": {
-            "name": "Demo",
-            "password": stauth.Hasher(["demo123"]).generate()[0]
-        }
-    }
-}
+with open('/Users/luchaoxin/dev/workspace/langchain-learn/examples/auth/config.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+# Pre-hashing all plain text passwords once
+# stauth.Hasher.hash_passwords(config['credentials'])
 
 authenticator = stauth.Authenticate(
-    credentials,
-    "app_cookie",  # Cookie 名称
-    "random_signature_key",  # 签名密钥
-    30  # Cookie 有效期（天）
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
 )
 
-name, authentication_status, username = authenticator.login("Login", "main")
+authenticator.login(
+    location="main",
+    max_concurrent_users=3
+)
+authentication_status = st.session_state.get('authentication_status')
+print(authentication_status)
 
-if authentication_status:
-    authenticator.logout('Logout', 'sidebar')
-    st.sidebar.write(f'Welcome *{name}*')
-    st.title('Application Content')
-elif authentication_status is False:
-    st.error('Username/password is incorrect')
-elif authentication_status is None:
-    st.warning('Please enter your username and password')
+# name, authentication_status, username = authenticator.login(
+#     location="main",
+#     max_concurrent_users=3
+# )
+
+# if authentication_status:
+#     authenticator.logout(button_name='Logout', location='sidebar')
+#     st.sidebar.write(f'Welcome *{name}*')
+#     st.title('Application Content')
+# elif authentication_status is False:
+#     st.error('Username/password is incorrect')
+# elif authentication_status is None:
+#     st.warning('Please enter your username and password')

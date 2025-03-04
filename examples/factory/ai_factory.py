@@ -10,7 +10,7 @@ def create_ai() -> ChatOpenAI:
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         model="qwen2.5-14b-instruct-1m",
         # model="qwen-turbo-latest",
-        temperature=0.0
+        temperature=0.2
     )
 
 # def create_ai() -> ChatOpenAI:
