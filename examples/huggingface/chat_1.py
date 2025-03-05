@@ -1,18 +1,15 @@
 from langchain_huggingface import HuggingFacePipeline, ChatHuggingFace
 from transformers.utils import quantization_config
 
+# 使用 HuggingFacePipeline 时，模型是加载至本机并在本机运行的
 llm = HuggingFacePipeline.from_model_id(
-    model_id="ali-vilab/MS-Image2Video",
+    model_id="microsoft/Phi-3-mini-4k-instruct",
     task="text-generation",
-    pipeline_kwargs=dict(
-        max_new_tokens=512,
-        do_sample=False,
-        repetition_penalty=1.03,
-        return_full_text=False,
-    ),
-    model_kwargs={"quantization_config": quantization_config},
+    pipeline_kwargs={
+        "max_new_tokens": 100,
+        "top_k": 50,
+        "temperature": 0.1,
+    },
 )
-
-chat_model = ChatHuggingFace(llm=llm)
-response = chat_model.invoke("Generate a video about a cat.")
-response.pretty_print()
+resp = llm.invoke("Hugging Face is")
+print(type(resp))
