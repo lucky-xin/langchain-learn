@@ -16,7 +16,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import create_retriever_tool
 from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
 from streamlit.runtime.uploaded_file_manager import UploadedFile
-
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from examples.factory.ai_factory import create_ai
 
 
@@ -58,7 +58,6 @@ def load_documents(file: str) -> list[Document]:
 
 # splitting data in chunks
 def split_documents(data: Iterable[Document], chunk_size=2000, chunk_overlap=200) -> List[Document]:
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return text_splitter.split_documents(data)
 
