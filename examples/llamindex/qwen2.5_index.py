@@ -2,7 +2,9 @@ import os
 
 from llama_index.core import Settings, SimpleDirectoryReader, VectorStoreIndex
 from llama_index.core.chat_engine.types import ChatMode
+from llama_index.core.indices.query.query_transform import HyDEQueryTransform
 from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.query_engine import TransformQueryEngine
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 # Set prompt template for generation (optional)
 from llama_index.llms.openai_like import OpenAILike
@@ -63,6 +65,9 @@ index = VectorStoreIndex.from_documents(
 query_engine = index.as_query_engine(Settings.llm)
 
 resp = query_engine.query("TOGAF架构内容框架")
+
+hyde = HyDEQueryTransform(include_original=True)
+lyft_hyde_query_engine = TransformQueryEngine(query_engine, hyde)
 
 base_chat_engine = index.as_chat_engine(
     context_window=1024,
