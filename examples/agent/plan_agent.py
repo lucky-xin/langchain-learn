@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 
 class PlanExecute(TypedDict):
@@ -62,7 +62,7 @@ planner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-planner_llm = create_ai().with_structured_output(schema=Plan, method="function_calling")
+planner_llm = create_chat_ai().with_structured_output(schema=Plan, method="function_calling")
 
 planner = planner_prompt | planner_llm
 
@@ -89,14 +89,14 @@ replanner_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-replanner_llm = create_ai().with_structured_output(schema=Action, method="function_calling")
+replanner_llm = create_chat_ai().with_structured_output(schema=Action, method="function_calling")
 
 replanner = replanner_prompt | replanner_llm
 
 prompt = hub.pull("wfh/react-agent-executor")
 prompt.pretty_print()
 agent_executor = create_react_agent(
-    create_ai(),
+    create_chat_ai(),
     tools,
     messages_modifier=prompt
 )

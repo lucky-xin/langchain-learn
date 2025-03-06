@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFie
 from langchain_core.tools import create_retriever_tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 from examples.his.chat_history_store import ChatHistoryStore
 
 loader = WebBaseLoader("https://zh.wikipedia.org/wiki/%E7%8C%AB")
@@ -33,7 +33,7 @@ retriever_tool = create_retriever_tool(
     """,
 )
 
-llm = create_ai()
+llm = create_chat_ai()
 search = TavilySearchResults()
 tools = [retriever_tool, search]
 

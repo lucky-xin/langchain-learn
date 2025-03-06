@@ -6,11 +6,11 @@ from langchain_community.callbacks.streamlit import (
     StreamlitCallbackHandler,
 )
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 st_callback = StreamlitCallbackHandler(st.container())
 
-llm = create_ai()
+llm = create_chat_ai()
 
 tools = load_tools(["ddg-search"])
 prompt = hub.pull("hwchase17/react")

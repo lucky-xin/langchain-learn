@@ -9,7 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFieldSpec
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 
 def get_current_timestamp() -> int:
@@ -20,7 +20,7 @@ def get_current_timestamp() -> int:
 
 
 if __name__ == '__main__':
-    llm = create_ai()
+    llm = create_chat_ai()
     additionals = {"timestamp": "{timestamp}", "user_id": "{user_id}"}
     fp = "image.jpg"
     # 读取图片并转换为base64编码

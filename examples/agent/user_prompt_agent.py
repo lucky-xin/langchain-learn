@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 from examples.agent.postgres_saver_factory import create_checkpointer
 from examples.agent.streamlit_callback_utils import get_streamlit_cb
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 
 class State(TypedDict):
@@ -117,7 +117,7 @@ def init():
         st.chat_message(msg["role"]).write(msg["content"])
 
 
-llm = create_ai()
+llm = create_chat_ai()
 llm_with_tool = llm.bind_tools([PromptInstructions])
 
 # Create graph builder

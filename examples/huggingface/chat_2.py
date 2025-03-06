@@ -1,7 +1,7 @@
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 
 llm = HuggingFaceEndpoint(
-    model="meta-llama/Meta-Llama-3-70B-Instruct",
+    model="deepseek-ai/DeepSeek-R1",
     max_new_tokens=10,
     cache=False,
     seed=123,

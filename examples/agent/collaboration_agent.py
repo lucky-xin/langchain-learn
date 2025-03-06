@@ -12,7 +12,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 
 class AgentState(TypedDict):
@@ -115,7 +115,7 @@ tools = [
 ]
 tool_node = ToolNode(tools)
 
-chat_llm = create_ai()
+chat_llm = create_chat_ai()
 
 research_agent = create_agent(
     chat_llm,

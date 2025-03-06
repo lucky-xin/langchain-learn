@@ -4,7 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState, END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.ai_factory import create_chat_ai
 
 
 @tool
@@ -26,7 +26,7 @@ def should_continue(state: MessagesState) -> str:
 
 tools = [search_online]
 tool_node = ToolNode(tools)
-llm = create_ai()
+llm = create_chat_ai()
 
 
 def call_llm(state: MessagesState):
