@@ -5,6 +5,7 @@ from llama_index.core.chat_engine.types import ChatMode
 from llama_index.core.indices.query.query_transform import HyDEQueryTransform
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.query_engine import TransformQueryEngine
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.embeddings.dashscope import DashScopeEmbedding
 # Set prompt template for generation (optional)
 from llama_index.llms.openai_like import OpenAILike
@@ -62,13 +63,6 @@ index = VectorStoreIndex.from_documents(
     embed_model=Settings.embed_model
 )
 
-query_engine = index.as_query_engine(Settings.llm)
-
-resp = query_engine.query("TOGAF架构内容框架")
-
-hyde = HyDEQueryTransform(include_original=True)
-lyft_hyde_query_engine = TransformQueryEngine(query_engine, hyde)
-
 base_chat_engine = index.as_chat_engine(
     context_window=1024,
     llm=Settings.llm,
@@ -79,8 +73,27 @@ base_chat_engine = index.as_chat_engine(
     """
 )
 
-query_resp = base_chat_engine.chat("请给我一个关于如何使用LlamaIndex的示例")
-print(query_resp)
+hyde = HyDEQueryTransform(include_original=True)
+query_engine = index.as_query_engine(Settings.llm)
+hyde_query_engine = TransformQueryEngine(query_engine, hyde)
+
+query_engine_tools = [
+    QueryEngineTool(
+        query_engine=hyde_query_engine,
+        metadata=ToolMetadata(
+            name="hyde_10k",
+            description=(
+                "Provides information about Uber financials for year 2021. "
+                "Use a detailed plain text question as input to the tool."
+            ),
+        ),
+    ),
+]
+
+q = "请给我一个关于如何使用LlamaIndex的示例"
+response = hyde_query_engine.query(q)
+print(response)
+
 
 print("已使用DashScopeEmbedding模型构建了多个文档的向量化索引")
 
