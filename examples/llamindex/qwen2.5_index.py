@@ -8,6 +8,7 @@ from llama_index.embeddings.dashscope import DashScopeEmbedding
 from llama_index.llms.openai_like import OpenAILike
 
 
+# conda create -n ai python=3.12
 def completion_to_prompt(completion):
     return f"<|im_start|>system\n<|im_end|>\n<|im_start|>user\n{completion}<|im_end|>\n<|im_start|>assistant\n"
 
@@ -54,7 +55,7 @@ documents = SimpleDirectoryReader("/tmp/agent").load_data()
 
 # from_documents方法包含对文档进行切片与建立索引两个步骤
 index = VectorStoreIndex.from_documents(
-    documents,
+    documents=documents,
     # 指定embedding 模型
     embed_model=Settings.embed_model
 )

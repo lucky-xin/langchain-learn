@@ -5,6 +5,7 @@ import streamlit as st
 from langchain import hub
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.memory import ConversationBufferMemory
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.callbacks import StreamlitCallbackHandler
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.embeddings import DashScopeEmbeddings
@@ -16,13 +17,13 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import create_retriever_tool
 from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
 from streamlit.runtime.uploaded_file_manager import UploadedFile
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 from examples.factory.ai_factory import create_ai
 
 
 def create_vector_store() -> VectorStore:
     # return Chroma("langchain_store", DashScopeEmbeddings())
-    return InMemoryVectorStore(DashScopeEmbeddings())
+    return InMemoryVectorStore(DashScopeEmbeddings(model="text-embedding-v2"))
 
 
 # Write uploaded file in temp dir
@@ -172,7 +173,10 @@ if __name__ == "__main__":
         with st.chat_message("assistant"):
             output_placeholder = st.empty()
             st_cb = StreamlitCallbackHandler(st.container())
-            agent = create_agent(st.session_state.vs.as_retriever())
+            agent = create_agent(st.session_state.vs.as_retriever(
+                search_type="semantic_hybrid",
+                search_kwargs={"k": 4},
+            ))
             stream = agent.stream({"input": q}, config={"callbacks": [st_cb]})
             for chunk in stream:
                 if "output" in chunk:

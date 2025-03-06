@@ -2,7 +2,8 @@ import asyncio
 
 from browser_use import Agent
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+
+from examples.factory.ai_factory import create_ai
 
 load_dotenv()
 
@@ -10,7 +11,7 @@ load_dotenv()
 async def main():
     agent = Agent(
         task="Compare the price of gpt-4o and DeepSeek-V3",
-        llm=ChatOpenAI(model="gpt-4o"),
+        llm=create_ai(),
     )
     await agent.run()
 
