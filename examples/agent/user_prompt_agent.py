@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 
 from examples.agent.postgres_saver_factory import create_checkpointer
 from examples.agent.streamlit_callback_utils import get_streamlit_cb
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class State(TypedDict):
@@ -116,8 +116,10 @@ def init():
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
 
-
-llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI
+)
+llm = llm_factory.create_chat_llm()
 llm_with_tool = llm.bind_tools([PromptInstructions])
 
 # Create graph builder

@@ -20,7 +20,7 @@ from llama_index.llms.openai_like import OpenAILike
 from llama_index.vector_stores.postgres import PGVectorStore
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
-from examples.factory.ai_factory import create_llm
+from examples.factory.llm import LLMFactory, LLMType
 
 
 # Write uploaded file in temp dir
@@ -116,9 +116,12 @@ def create_agent() -> AgentExecutor:
         )
     ]
     llama_toolkit = LlamaToolkit(index_configs=index_configs)
+    llm_factory = LLMFactory(
+        llm_type=LLMType.LLM_TYPE_QWENAI,
+    )
     return create_llama_agent(
         toolkit=llama_toolkit,
-        llm=create_llm(),
+        llm=llm_factory.create_llm(),
         memory=memory,
         verbose=True,
         handle_parsing_errors="没有从知识库检索到相似的内容"

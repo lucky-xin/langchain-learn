@@ -5,7 +5,7 @@ import yaml
 from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit
 from langchain_community.utilities.requests import TextRequestsWrapper
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 def _get_schema(response_json: Union[dict, list]) -> dict:
@@ -72,7 +72,10 @@ requests_toolkit = RequestsToolkit(
 api_spec = _get_api_spec()
 from langgraph.prebuilt import create_react_agent
 
-llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI
+)
+llm = llm_factory.create_llm()
 
 system_message = """
 You have access to an API to help answer user queries.

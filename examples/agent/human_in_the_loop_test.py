@@ -10,7 +10,7 @@ from langgraph.prebuilt import ToolNode, tools_condition, create_react_agent
 from langgraph.types import interrupt, Command
 from typing_extensions import TypedDict
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class State(TypedDict):
@@ -61,8 +61,11 @@ tools = [
 
 prompt = hub.pull("wfh/react-agent-executor")
 prompt.pretty_print()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
 agent_executor = create_react_agent(
-    model=create_chat_ai(),
+    model=llm_factory.create_llm(),
     tools=tools,
     messages_modifier=prompt,
     version="v2",

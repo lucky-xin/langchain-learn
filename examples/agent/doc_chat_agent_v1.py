@@ -18,7 +18,7 @@ from langchain_core.tools import create_retriever_tool
 from langchain_core.vectorstores import VectorStore, InMemoryVectorStore
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
-from examples.factory.ai_factory import create_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 def create_vector_store() -> VectorStore:
@@ -115,7 +115,10 @@ def create_agent(retriever: BaseRetriever) -> AgentExecutor:
         ),
         DuckDuckGoSearchResults()
     ]
-    react_agent = create_react_agent(create_ai(), tools, create_prompt())
+    llm_factory = LLMFactory(
+        llm_type=LLMType.LLM_TYPE_QWENAI,
+    )
+    react_agent = create_react_agent(llm_factory.create_chat_llm(), tools, create_prompt())
     return AgentExecutor(
         agent=react_agent,
         tools=tools,

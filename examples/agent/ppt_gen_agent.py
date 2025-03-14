@@ -11,7 +11,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class PPT(BaseModel):
@@ -73,8 +73,11 @@ gen_prompt = ChatPromptTemplate.from_messages(
         ("placeholder", "{messages}"),
     ]
 )
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI
+)
 
-gen_llm = create_chat_ai().with_structured_output(schema=PPT)
+gen_llm = llm_factory.create_chat_llm().with_structured_output(schema=PPT)
 generate_agent = gen_prompt | gen_llm
 
 prompt = hub.pull("wfh/react-agent-executor")
@@ -103,7 +106,7 @@ edit_prompt = ChatPromptTemplate.from_messages(
         ),
     ])
 
-edit_agent = edit_prompt | create_chat_ai().with_structured_output(schema=EditResp)
+edit_agent = edit_prompt | llm_factory.create_chat_llm().with_structured_output(schema=EditResp)
 
 
 async def create_ppt_gen_graph() -> StateGraph:

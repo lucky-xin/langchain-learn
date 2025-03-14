@@ -13,7 +13,7 @@ from langgraph.graph import add_messages, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
-from examples.factory.ai_factory import create_ai_with_callbacks
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class State(TypedDict):
@@ -303,7 +303,10 @@ def chatbot(state: State):
 
 # Initialize LLM with the handler
 callbacks = [HumanInterventionHandler()]
-llm = create_ai_with_callbacks(callbacks)
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI, callbacks=callbacks
+)
+llm = llm_factory.create_llm()
 # Initialize Google Search tool
 search = DuckDuckGoSearchResults()
 search_tool = Tool(

@@ -3,6 +3,7 @@ import operator
 from typing import Annotated, Literal, Sequence, TypedDict
 
 from langchain_community.tools import DuckDuckGoSearchResults, TavilySearchResults
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolMessage, AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool, BaseTool
@@ -12,7 +13,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class AgentState(TypedDict):
@@ -54,7 +55,7 @@ def router(state: AgentState) -> Literal["call_tool", "__end__", "continue"]:
     return "continue"
 
 
-def create_agent(llm: BaseChatOpenAI, ts: [BaseTool], system_message: str):
+def create_agent(llm: BaseChatModel, ts: [BaseTool], system_message: str):
     """
     创建一个代理，它使用指定的LLM和工具集来执行任务。
     """
@@ -114,8 +115,10 @@ tools = [
     python_repl
 ]
 tool_node = ToolNode(tools)
-
-chat_llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
+chat_llm = llm_factory.create_chat_llm()
 
 research_agent = create_agent(
     chat_llm,
