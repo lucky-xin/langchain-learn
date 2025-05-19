@@ -13,7 +13,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import PromptTemplate
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMType, LLMFactory
 
 
 @st.cache_resource(ttl="1h")
@@ -116,7 +116,9 @@ New input: {input}
 base_prompt = PromptTemplate.from_template(base_prompt_template)
 
 prompt = base_prompt.partial(instructions=instructions)
-llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
 
 msgs = StreamlitChatMessageHistory()
 memory = ConversationBufferMemory(
@@ -125,7 +127,7 @@ memory = ConversationBufferMemory(
     output_key="output",
     chat_memory=msgs
 )
-agent = create_react_agent(llm, tools, prompt)
+agent = create_react_agent(llm_factory.create_llm(), tools, prompt)
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,

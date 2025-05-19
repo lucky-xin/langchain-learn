@@ -6,7 +6,7 @@ from langchain_community.utilities import SQLDatabase
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from sqlalchemy import create_engine, URL, util
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 def create_prompt(args: dict[str, str] = None) -> BasePromptTemplate:
@@ -115,8 +115,11 @@ params = {
     "city_table_name": "ref_old_city",
     "table_names": "ref_old_brand,ref_old_model,ref_old_basictrim,ref_old_city"
 }
-
-toolkit = SQLDatabaseToolkit(db=db, llm=create_chat_ai())
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
+chat_llm = llm_factory.create_chat_llm()
+toolkit = SQLDatabaseToolkit(db=db, llm=chat_llm)
 
 tools = toolkit.get_tools()
 
@@ -127,7 +130,7 @@ system_message = prompt_template.format(dialect="MySQL", top_k=5)
 
 from langgraph.prebuilt import create_react_agent
 
-agent_executor = create_react_agent(create_chat_ai(), tools, prompt=system_message)
+agent_executor = create_react_agent(chat_llm, tools, prompt=system_message)
 
 while True:
     user_input = input("用户：")

@@ -1,23 +1,18 @@
 import asyncio
-import os
 
 from langchain_mcp_adapters.client import MultiServerMCPClient, SSEConnection
-from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
+from examples.factory.llm import LLMFactory, LLMType
 
 
 async def run(q: str) -> None:
-    llm = ChatOpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY"),
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model='qwq-plus-latest',
-        temperature=0.2,
-        streaming=True,
+    llm_factory = LLMFactory(
+        llm_type=LLMType.LLM_TYPE_QWENAI,
     )
     async with MultiServerMCPClient(
             {"searcher": SSEConnection(url="http://localhost:8888/sse", transport="sse")}
     ) as client:
-        agent = create_react_agent(llm, client.get_tools())
+        agent = create_react_agent(llm_factory.create_llm(), client.get_tools())
         resp = await agent.ainvoke({"messages": q})
         messages = resp.get("messages", [])
         for message in messages:

@@ -2,7 +2,7 @@ from langchain.output_parsers import YamlOutputParser
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 class Joke(BaseModel):
@@ -19,7 +19,9 @@ if __name__ == '__main__':
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
 
-    llm = create_chat_ai()
-    chain = prompt | llm
+    llm_factory = LLMFactory(
+        llm_type=LLMType.LLM_TYPE_QWENAI,
+    )
+    chain = prompt | llm_factory.create_llm()
     resp = chain.invoke({"query": jq})
     print(resp)

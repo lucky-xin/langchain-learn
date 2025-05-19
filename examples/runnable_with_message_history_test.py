@@ -9,7 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFieldSpec
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 
 def get_current_timestamp() -> int:
@@ -20,7 +20,9 @@ def get_current_timestamp() -> int:
 
 
 if __name__ == '__main__':
-    llm = create_chat_ai()
+    llm_factory = LLMFactory(
+        llm_type=LLMType.LLM_TYPE_QWENAI,
+    )
     additionals = {"timestamp": "{timestamp}", "user_id": "{user_id}"}
     fp = "image.jpg"
     # 读取图片并转换为base64编码
@@ -52,7 +54,7 @@ if __name__ == '__main__':
     ])
 
     # 创建链式调用
-    chain = template | llm | StrOutputParser()
+    chain = template | llm_factory.create_llm() | StrOutputParser()
 
     chain_with_history = RunnableWithMessageHistory(
         chain,

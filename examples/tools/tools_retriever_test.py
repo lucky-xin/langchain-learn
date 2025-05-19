@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableWithMessageHistory, ConfigurableFie
 from langchain_core.tools import create_retriever_tool
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 from examples.his.chat_history_store import ChatHistoryStore
 
 loader = WebBaseLoader("https://zh.wikipedia.org/wiki/%E7%8C%AB")
@@ -33,12 +33,14 @@ retriever_tool = create_retriever_tool(
     """,
 )
 
-llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
 search = TavilySearchResults()
 tools = [retriever_tool, search]
 
 prompt = hub.pull("hwchase17/openai-functions-agent")
-agent = create_tool_calling_agent(llm, tools, prompt)
+agent = create_tool_calling_agent(llm_factory.create_llm(), tools, prompt)
 
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 

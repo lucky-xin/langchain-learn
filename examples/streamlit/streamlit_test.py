@@ -6,15 +6,17 @@ from langchain_community.callbacks.streamlit import (
     StreamlitCallbackHandler,
 )
 
-from examples.factory.ai_factory import create_chat_ai
+from examples.factory.llm import LLMFactory, LLMType
 
 st_callback = StreamlitCallbackHandler(st.container())
 
-llm = create_chat_ai()
+llm_factory = LLMFactory(
+    llm_type=LLMType.LLM_TYPE_QWENAI,
+)
 
 tools = load_tools(["ddg-search"])
 prompt = hub.pull("hwchase17/react")
-agent = create_react_agent(llm, tools, prompt)
+agent = create_react_agent(llm_factory.create_llm(), tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 if prompt := st.chat_input():
