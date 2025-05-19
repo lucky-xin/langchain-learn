@@ -10,17 +10,17 @@ from examples.factory.llm import LLMFactory, LLMType
 
 llm_factory = LLMFactory(llm_type=LLMType.LLM_TYPE_QWENAI)
 llm = llm_factory.create_llm()
-env = os.environ.copy()
+environ = os.environ.copy()
 venv_site_packages = '/opt/homebrew/lib/python3.12/site-packages'
-if 'PYTHONPATH' in env:
-    env['PYTHONPATH'] = f"{venv_site_packages}:{env['PYTHONPATH']}"
+if 'PYTHONPATH' in environ:
+    environ['PYTHONPATH'] = f"{venv_site_packages}:{environ['PYTHONPATH']}"
 else:
-    env['PYTHONPATH'] = venv_site_packages
+    environ['PYTHONPATH'] = venv_site_packages
 server_params = StdioServerParameters(
     command="python3",
     # Make sure to update to the full absolute path to your math_server.py file
-    args=["/Users/luchaoxin/dev/workspace/langchain-learn/examples/mcp/math/math_server.py"],
-    env=env
+    args=["/langchain-learn/examples/mcp/math/math_server.py"],
+    env=environ
 )
 
 
